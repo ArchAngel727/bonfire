@@ -3,7 +3,7 @@
     import { show } from "@tauri-apps/api/app";
     import { invoke } from "@tauri-apps/api/core";
     import { on } from "svelte/events";
-    import 'src/style.css';
+    import "../../style.css";
 </script>
 
 <main class="container">
