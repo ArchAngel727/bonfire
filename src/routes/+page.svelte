@@ -23,14 +23,9 @@
       <h1 id="titletext">Bonfire</h1>
     </div>
 
-    <nav class="bar">
-      <a href="/register">Register</a>
-      <a href="/login">Login</a>
-    </nav>
-
     <p>Welcome to Bonfire! Bonfire is a modern Discord-like platform designed for real-time conversation, shared spaces, and meaningful connections. Create servers, join communities, chat with friends, and stay connected through a fast, simple, and welcoming experience.</p>
 
-    <button id="goto-btn" onclick={() => openPopup()}>Get started</button>
+    <button class="button-main" onclick={() => openPopup()}>Get started</button>
    {#if showPopup}
   <div class="popup-overlay" onclick={closePopup}>
     <div
@@ -38,13 +33,16 @@
       onclick={(event) => {
         event.stopPropagation();
       }}
-    >
+    > 
+      <div class ="popup-header">
       <h2>Welcome to Bonfire</h2>
       <p>Start by creating an account or logging in.</p>
-      <button id="button-main" onclick={() => goto("/register")}>Register</button>
-      <button id="button-main" onclick={() => goto("/login")}>Login</button>
-      <div class="close-btn">
-        <button id="close-btn" onclick={closePopup}>Close</button>
+      </div>
+
+      <div class="popup-buttons">
+      <button class="button-main" onclick={() => goto("/register")}>Register</button>
+      <button class="button-main" onclick={() => goto("/login")}>Login</button>
+      <button class="top-left-btn" onclick={closePopup}>X</button>
       </div>
     </div>
   </div>
