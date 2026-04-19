@@ -46,7 +46,20 @@
       </div>
     </div>
   </div>
+<<<<<<< HEAD
 {/if}
   </section>
+=======
+  <p>Click on the Tauri, Vite, and SvelteKit logos to learn more.</p>
+
+  <form class="row" onsubmit={greet}>
+    <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
+    <button type="submit">Greet</button>
+  </form>
+  <p>{greetMsg}</p>
+  <a href="/login">
+    <button>Zum Login</button>
+  </a>
+>>>>>>> login
 </main>
 
