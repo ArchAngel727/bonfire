@@ -1,5 +1,8 @@
 <script>
+  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { socket } from "$lib/socket.js";
+  import { SOCKET_EVENTS } from "$lib/socket-events.js";
   import "../../style.css";
 
   let username = "";
@@ -15,9 +18,46 @@
     return /^\S+@\S+\.\S+$/.test(value);
   }
 
-  async function handleRegister(event) { // Event Fehler wird noch bearbeitet
-    event.preventDefault();
+  function resetMessage() {
     message = "";
+  }
+
+  function handleRegisterSuccess(data) {
+    loading = false;
+    message = data?.message || "Account created successfully.";
+    // optional später:
+    // goto("/login");
+  }
+
+  function handleRegisterError(data) {
+    loading = false;
+    message = data?.message || "Registration failed.";
+  }
+
+  onMount(() => {
+    socket.connect();
+
+    socket.on(SOCKET_EVENTS.CONNECT, () => {
+      console.log("Socket connected:", socket.id);
+    });
+
+    socket.on(SOCKET_EVENTS.CONNECT_ERROR, (error) => {
+      loading = false;
+      message = error?.message || "Could not connect to server.";
+    });
+
+    socket.on(SOCKET_EVENTS.REGISTER_SUCCESS, handleRegisterSuccess);
+    socket.on(SOCKET_EVENTS.REGISTER_ERROR, handleRegisterError);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.REGISTER_SUCCESS, handleRegisterSuccess);
+      socket.off(SOCKET_EVENTS.REGISTER_ERROR, handleRegisterError);
+      socket.off(SOCKET_EVENTS.CONNECT_ERROR);
+    };
+  });
+
+  function handleRegister() {
+    resetMessage();
 
     const stepOneErrors = [];
 
@@ -34,12 +74,10 @@
     if (stepOneErrors.length > 0) {
       showPasswords = false;
       message = stepOneErrors.join(" ");
-      password = "";
-      confirmpassword = "";
       return;
     }
 
-    if(!showPasswords) {
+    if (!showPasswords) {
       showPasswords = true;
       return;
     }
@@ -65,14 +103,11 @@
 
     loading = true;
 
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      message = "Registration data is valid.";
-    } catch (error) {
-      message = "⚠️ Something went wrong. Please try again.";
-    } finally {
-      loading = false;
-    }
+    socket.emit(SOCKET_EVENTS.REGISTER_REQUEST, {
+      username,
+      email,
+      password
+    });
   }
 </script>
 

@@ -1,4 +1,6 @@
 <script>
+  import '../../style.css';
+
   let email = "";
   let password = "";
   let error = "";
