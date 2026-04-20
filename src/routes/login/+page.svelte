@@ -1,5 +1,5 @@
 <script>
-  //import '../../style.css';
+  import '../../style.css';
 
   let email = "";
   let password = "";
@@ -77,7 +77,6 @@
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
     text-align: center;
     color: rgb(255, 255, 255);
-    margin-top: 60px;
   }
 
   h1 {
@@ -133,13 +132,5 @@
 
   .link:hover {
     text-decoration: underline;
-  }
-
-  .containerLinks{
-    margin-top: 10px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 29px;
   }
 </style>    
