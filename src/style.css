@@ -53,7 +53,7 @@ p {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding-top: 100px;
+  padding-top: 0;
 }
 
 .hero {
@@ -242,7 +242,6 @@ button:active {
 }
 
 .container {
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
@@ -330,6 +329,7 @@ input {
   text-align: center;
   font-size: 0.95rem;
   opacity: 0.85;
+  margin-top: auto;
 }
 
 .features {
