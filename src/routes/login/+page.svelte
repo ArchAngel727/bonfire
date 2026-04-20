@@ -73,7 +73,7 @@
     width: 320px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
     text-align: center;
-    color: rgb(255, 77, 77);
+    color: rgb(255, 255, 255);
   }
 
   h1 {
