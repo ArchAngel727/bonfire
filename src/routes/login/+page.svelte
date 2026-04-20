@@ -1,5 +1,5 @@
 <script>
-  import '../../style.css';
+  import "../../style.css";
 
   let email = "";
   let password = "";
@@ -48,24 +48,19 @@
       <p class="error">{error}</p>
     {/if}
 
-    <button class="loginButton" on:click={login}>
-      Einloggen
-    </button>
+    <button class="loginButton" on:click={login}> Einloggen </button>
     <div class="containerLinks">
       <a href="/register" class="link">Register</a>
       <a href="/" class="link">Home</a>
     </div>
-
   </div>
 </main>
 
 <style>
   main {
-    height: 100vh;
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    background: #2f2f2f;
     font-family: Arial, sans-serif;
   }
 
@@ -77,6 +72,7 @@
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
     text-align: center;
     color: rgb(255, 255, 255);
+    margin-top: 80px;
   }
 
   h1 {
@@ -87,7 +83,7 @@
     width: 100%;
     box-sizing: border-box;
     padding: 0.75rem;
-    margin-bottom: 1rem;
+    margin-bottom: 1.2rem;
     border-radius: 8px;
     border: 1px solid #ccc;
     font-size: 1rem;
@@ -99,7 +95,7 @@
     border-color: black;
   }
 
-  .loginButton  {
+  .loginButton {
     width: 100%;
     padding: 0.75rem;
     background: #3b82f6;
@@ -133,4 +129,12 @@
   .link:hover {
     text-decoration: underline;
   }
-</style>    
+
+  .containerLinks {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 10px;
+    gap: 20px;
+  }
+</style>
