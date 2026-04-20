@@ -51,8 +51,11 @@
     <button class="loginButton" on:click={login}>
       Einloggen
     </button>
+    <div class="containerLinks">
+      <a href="/register" class="link">Register</a>
+      <a href="/" class="link">Home</a>
+    </div>
 
-    <a href="/" class="link">Zurück zur Homepage</a>
   </div>
 </main>
 
@@ -61,7 +64,7 @@
     height: 100vh;
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
     background: #2f2f2f;
     font-family: Arial, sans-serif;
   }
@@ -88,11 +91,12 @@
     border-radius: 8px;
     border: 1px solid #ccc;
     font-size: 1rem;
+    color: black;
   }
 
   input:focus {
     outline: none;
-    border-color: #3b82f6;
+    border-color: black;
   }
 
   .loginButton  {
@@ -105,6 +109,7 @@
     cursor: pointer;
     font-size: 1rem;
     transition: 0.2s;
+    margin-top: 12px;
   }
 
   .loginButton:hover {
