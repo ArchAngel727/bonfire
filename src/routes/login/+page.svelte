@@ -140,6 +140,6 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 30px;
+    gap: 29px;
   }
 </style>    
