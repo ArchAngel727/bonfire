@@ -1,5 +1,6 @@
 <script>
   import '../style.css';
+  import { page } from '$app/stores';
 </script>
 
 <div class="app-shell">
@@ -17,11 +18,12 @@
     </div>
   </header>
 
-  <main class="site-main">
+  <main class="site-main" class:chat-page={$page.url.pathname === '/chat'}>
     <slot />
   </main>
 
+
   <footer class="site-footer">
-    <p>© 2026 Bonfire. All rights reserved.</p>
+    <p>© 2026 Bonfire</p>
   </footer>
 </div>

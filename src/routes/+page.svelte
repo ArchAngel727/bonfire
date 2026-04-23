@@ -4,6 +4,7 @@
     import { invoke } from "@tauri-apps/api/core";
     import { on } from "svelte/events";
     import "../style.css";
+    import { blur } from 'svelte/transition';
 
   let showPopup = false;
 
@@ -27,7 +28,7 @@
 
     <button class="button-main1" onclick={() => openPopup()}>Get started</button>
    {#if showPopup}
-  <div class="popup-overlay" onclick={closePopup}>
+  <div class="popup-overlay" onclick={closePopup} transition:blur={{ duration: 400 }}>
     <div
       class="popup"
       onclick={(event) => {
@@ -42,6 +43,7 @@
       <div class="popup-buttons">
       <button class="button-main2" onclick={() => goto("/register")}>Register</button>
       <button class="button-main2" onclick={() => goto("/login")}>Login</button>
+      <button class="button-main2" onclick={() => goto("/chat")}>Go to Chat</button>
       <button class="top-left-btn" onclick={closePopup}>X</button>
       </div>
     </div>
