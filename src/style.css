@@ -290,13 +290,148 @@ button:active {
   height: 100%;
   display: grid;
   grid-template-columns: 280px 1fr 230px;
-  grid-template-rows: 1fr 90px;
+  grid-template-rows: 1fr auto 90px;  /* auto für preview neu */
   grid-template-areas:
-    "friends history history"
-    "friends input buttons";
+    "friends history  history"
+    "friends preview  preview"          /* neu */
+    "friends input    buttons";
   background: #1b1b1b;
   border: 3px solid #ffffff;
   border-radius: 5px;
+}
+
+.preview-bar {
+  grid-area: preview;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.preview-thumb {
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.preview-thumb img {
+  display: block;
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.remove-btn {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-btn:hover {
+  background: red;
+}
+
+.file-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+}
+
+.file-chip-icon { font-size: 20px; line-height: 1; }
+
+.file-chip-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.file-chip-name {
+  font-size: 13px;
+  font-weight: 500;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-chip-size {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.file-chip-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0.5;
+  font-size: 23px;
+  padding: 0;
+  line-height: 1;
+  color: white;
+}
+
+.file-chip-remove:hover { opacity: 1; color: #ffffff; background-color: red; border-radius: 0.25rem;}
+
+.preview-thumb img {
+  cursor: zoom-in; /* zeigt an dass es klickbar ist */
+}
+
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.lightbox-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.lightbox-close {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightbox-close:hover {
+  background: #ed4245;
 }
 
 .friends {
