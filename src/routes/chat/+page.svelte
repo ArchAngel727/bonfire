@@ -1,6 +1,8 @@
 <script>
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
+  import { slide } from 'svelte/transition';
+  import { flip } from 'svelte/animate';
 
   let openAttachment = false;
 
@@ -104,23 +106,25 @@
       <h2>Username</h2>
     </section>
 
-{#if previews.length > 0}
   <div class="preview-bar">
-    {#each previews as preview, i}
+  {#each previews as preview, i (preview.url)}
 
+    <div
+      animate:flip={{ duration: 300 }}
+      in:fly={{ y: 30, duration: 300 }}
+      out:fly={{ y: -30, duration: 200 }}
+    >
       {#if preview.type.startsWith('image/')}
         <div class="preview-thumb">
-        <img
-          src={preview.url}
-          alt={preview.name}
-          on:click={() => openLightbox(preview)}
-        />
-        <button class="remove-btn" on:click={() => removePreview(i)}>✕</button>
-      </div>
-
+          <img
+            src={preview.url}
+            alt={preview.name}
+            on:click={() => openLightbox(preview)}
+          />
+          <button class="remove-btn" on:click={() => removePreview(i)}>✕</button>
+        </div>
 
       {:else}
-        <!-- Alles andere: Chip mit Icon + Name + Größe -->
         <div class="file-chip">
           <span class="file-chip-icon">{getIcon(preview.type)}</span>
           <span class="file-chip-meta">
@@ -130,10 +134,10 @@
           <button class="file-chip-remove" on:click={() => removePreview(i)}>✕</button>
         </div>
       {/if}
+    </div>
 
-    {/each}
-  </div>
-{/if}
+  {/each}
+</div>
 
     <div class="chat-input">
       <input
@@ -150,7 +154,7 @@
       <div class="attachment-menu-wrapper" bind:this={attachmentMenu}>
         {#if openAttachment}
           <div class="attachment-panel" transition:fly={{ y: 20, duration: 350 }}>
-            <button class="attachment-option" on:click={() => openFilePicker('*')}>Datei</button>
+            <button class="attachment-option" on:click={() => openFilePicker('*')}>File</button>
           </div>
         {/if}
 
