@@ -1,23 +1,66 @@
 <script>
+  import { io } from "socket.io-client";
+  import { onMount, onDestroy } from "svelte";
   import "../../style.css";
 
-  let email = "";
+  let username = "";
   let password = "";
   let error = "";
+  let socket = io("ws://127.0.0.1:3000/login");;
+  let connected = false;
+
+  onMount(() => {
+
+    socket.on("connect", () => {
+      console.log("Connected with server /login!");
+      connected = true;
+    });
+
+    socket.on("connect_error", (err) => {
+      console.log("❌ Fehler:", err.message);
+      error = "Server nicht erreichbar!";
+    });
+
+    socket.on("disconnect", () => {
+      connected = false;
+    });
+  });
+
+  onDestroy(() => {
+    socket?.disconnect();
+  });
 
   function login() {
-    if (!email || !password) {
-      error = "Bitte alle Felder ausfüllen";
-      return;
-    }
-
-    if (email === "test@test.com" && password === "1234") {
-      error = "";
-      alert("Login erfolgreich!");
-    } else {
-      error = "Falsche E-Mail oder Passwort";
-    }
+  if (!username || !password) {
+    error = "Username or Password missing!";
+    return;
   }
+
+  if (!connected) {
+    error = "Can't reach server";
+    return;
+  }
+
+  console.log("Login with:", { username, password });
+
+  // ← Timeout: wenn Server in 5 Sek nicht antwortet, Fehler!
+  const timeout = setTimeout(() => {
+    console.log("⏱️ Server antwortet nicht!");
+    error = "Server antwortet nicht (Timeout)";
+  }, 5000);
+
+  socket.emit("login", { username, password }, (response) => {
+    clearTimeout(timeout);
+    console.log("Server:", response);
+
+    if (response?.session_id && response.signature) {
+      error = "";
+      alert("Login succesfull!");
+    } else {
+      error = response?.message || "Wrong Username oder Password";
+    }
+  });
+}
 
   function handleKey(e) {
     if (e.key === "Enter") {
@@ -31,17 +74,15 @@
     <h1>Login</h1>
 
     <input
-      type="email"
-      placeholder="E-Mail"
-      bind:value={email}
-      on:keydown={handleKey}
+      type="text"
+      placeholder="username"
+      bind:value={username}
     />
 
     <input
       type="password"
       placeholder="Passwort"
       bind:value={password}
-      on:keydown={handleKey}
     />
 
     {#if error}
@@ -58,9 +99,11 @@
 
 <style>
   main {
+    height: 100vh;
     display: flex;
     justify-content: center;
     align-items: flex-start;
+    background: #2f2f2f;
     font-family: Arial, sans-serif;
   }
 
@@ -72,7 +115,6 @@
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
     text-align: center;
     color: rgb(255, 255, 255);
-    margin-top: 80px;
   }
 
   h1 {
@@ -83,7 +125,7 @@
     width: 100%;
     box-sizing: border-box;
     padding: 0.75rem;
-    margin-bottom: 1.2rem;
+    margin-bottom: 1rem;
     border-radius: 8px;
     border: 1px solid #ccc;
     font-size: 1rem;
@@ -128,13 +170,5 @@
 
   .link:hover {
     text-decoration: underline;
-  }
-
-  .containerLinks {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-top: 10px;
-    gap: 20px;
   }
 </style>
