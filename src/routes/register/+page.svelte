@@ -1,7 +1,7 @@
 <script>
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { socket } from "$lib/socket.js";
+  import { registerSocket as socket } from "$lib/socket.js";
   import { SOCKET_EVENTS } from "$lib/socket-events.js";
   import "../../style.css";
 
@@ -22,18 +22,6 @@
     message = "";
   }
 
-  function handleRegisterSuccess(data) {
-    loading = false;
-    message = data?.message || "Account created successfully.";
-    // optional später:
-    // goto("/login");
-  }
-
-  function handleRegisterError(data) {
-    loading = false;
-    message = data?.message || "Registration failed.";
-  }
-
   onMount(() => {
     socket.connect();
 
@@ -46,12 +34,7 @@
       message = error?.message || "Could not connect to server.";
     });
 
-    socket.on(SOCKET_EVENTS.REGISTER_SUCCESS, handleRegisterSuccess);
-    socket.on(SOCKET_EVENTS.REGISTER_ERROR, handleRegisterError);
-
     return () => {
-      socket.off(SOCKET_EVENTS.REGISTER_SUCCESS, handleRegisterSuccess);
-      socket.off(SOCKET_EVENTS.REGISTER_ERROR, handleRegisterError);
       socket.off(SOCKET_EVENTS.CONNECT_ERROR);
     };
   });
@@ -103,11 +86,23 @@
 
     loading = true;
 
-    socket.emit(SOCKET_EVENTS.REGISTER_REQUEST, {
-      username,
-      email,
-      password
-    });
+    // ← alles hier DRIN in der Funktion!
+    console.log("Sende Event:", SOCKET_EVENTS.REGISTER_REQUEST);
+    console.log("Socket connected?", socket.connected);
+
+    socket.emit(
+      SOCKET_EVENTS.REGISTER_REQUEST,
+      { username, password },
+      (response) => {
+        console.log("ACK bekommen:", response);
+        loading = false;
+        if (response === "Error") {
+          message = "Registration failed.";
+        } else {
+          message = "Account created! ✅";
+        }
+      }
+    );
   }
 </script>
 
