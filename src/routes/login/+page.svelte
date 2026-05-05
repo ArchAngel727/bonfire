@@ -8,17 +8,29 @@
   let error = "";
   let socket = io("ws://127.0.0.1:3000/login");;
   let connected = false;
+  let isLoggedIn = false;
+  let cookie = null;
 
   onMount(() => {
-
+    const saved = localStorage.getItem("session")
+    if(saved){
+      try {
+          cookie = JSON.parse(saved);
+          isLoggedIn = true;
+          console.log("Already logged in");
+      } catch(e) {
+        console.log("Something went wrong!");
+        localStorage.removeItem("session");
+      }
+    }
     socket.on("connect", () => {
       console.log("Connected with server /login!");
       connected = true;
     });
 
     socket.on("connect_error", (err) => {
-      console.log("❌ Fehler:", err.message);
-      error = "Server nicht erreichbar!";
+      console.log("Error:", err.message);
+      error = "Can't reach server";
     });
 
     socket.on("disconnect", () => {
@@ -43,10 +55,9 @@
 
   console.log("Login with:", { username, password });
 
-  // ← Timeout: wenn Server in 5 Sek nicht antwortet, Fehler!
   const timeout = setTimeout(() => {
-    console.log("⏱️ Server antwortet nicht!");
-    error = "Server antwortet nicht (Timeout)";
+    console.log("Server Timeout");
+    error = "Server Timeout";
   }, 5000);
 
   socket.emit("login", { username, password }, (response) => {
@@ -54,6 +65,13 @@
     console.log("Server:", response);
 
     if (response?.session_id && response.signature) {
+      cookie = {
+        session_id: Array.from(response.session_id),
+        signature: Array.from(response.signature)
+      }
+      
+      localStorage.setItem("session", JSON.stringify(cookie));
+      isLoggedIn = true;
       error = "";
       alert("Login succesfull!");
     } else {
@@ -61,6 +79,11 @@
     }
   });
 }
+  function logout() {
+    localStorage.removeItem("session");
+    cookie = null;
+    isLoggedIn = false;
+  }
 
   function handleKey(e) {
     if (e.key === "Enter") {
@@ -73,17 +96,9 @@
   <div class="card">
     <h1>Login</h1>
 
-    <input
-      type="text"
-      placeholder="username"
-      bind:value={username}
-    />
+    <input type="text" placeholder="username" bind:value={username} />
 
-    <input
-      type="password"
-      placeholder="Passwort"
-      bind:value={password}
-    />
+    <input type="password" placeholder="Passwort" bind:value={password} />
 
     {#if error}
       <p class="error">{error}</p>
