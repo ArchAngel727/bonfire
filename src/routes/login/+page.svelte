@@ -96,7 +96,7 @@
   <div class="card">
     <h1>Login</h1>
 
-    <input type="text" placeholder="username" bind:value={username} />
+    <input type="text" placeholder="Username" bind:value={username} />
 
     <input type="password" placeholder="Passwort" bind:value={password} />
 
@@ -118,7 +118,6 @@
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    background: #2f2f2f;
     font-family: Arial, sans-serif;
   }
 
