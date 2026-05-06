@@ -1,22 +1,88 @@
 <script>
+  import { io } from "socket.io-client";
+  import { onMount, onDestroy } from "svelte";
   import "../../style.css";
 
-  let email = "";
+  let username = "";
   let password = "";
   let error = "";
+  let socket = io("ws://127.0.0.1:3000/login");;
+  let connected = false;
+  let isLoggedIn = false;
+  let cookie = null;
+
+  onMount(() => {
+    const saved = localStorage.getItem("session")
+    if(saved){
+      try {
+          cookie = JSON.parse(saved);
+          isLoggedIn = true;
+          console.log("Already logged in");
+      } catch(e) {
+        console.log("Something went wrong!");
+        localStorage.removeItem("session");
+      }
+    }
+    socket.on("connect", () => {
+      console.log("Connected with server /login!");
+      connected = true;
+    });
+
+    socket.on("connect_error", (err) => {
+      console.log("Error:", err.message);
+      error = "Can't reach server";
+    });
+
+    socket.on("disconnect", () => {
+      connected = false;
+    });
+  });
+
+  onDestroy(() => {
+    socket?.disconnect();
+  });
 
   function login() {
-    if (!email || !password) {
-      error = "Bitte alle Felder ausfüllen";
-      return;
-    }
+  if (!username || !password) {
+    error = "Username or Password missing!";
+    return;
+  }
 
-    if (email === "test@test.com" && password === "1234") {
+  if (!connected) {
+    error = "Can't reach server";
+    return;
+  }
+
+  console.log("Login with:", { username, password });
+
+  const timeout = setTimeout(() => {
+    console.log("Server Timeout");
+    error = "Server Timeout";
+  }, 5000);
+
+  socket.emit("login", { username, password }, (response) => {
+    clearTimeout(timeout);
+    console.log("Server:", response);
+
+    if (response?.session_id && response.signature) {
+      cookie = {
+        session_id: Array.from(response.session_id),
+        signature: Array.from(response.signature)
+      }
+      
+      localStorage.setItem("session", JSON.stringify(cookie));
+      isLoggedIn = true;
       error = "";
-      alert("Login erfolgreich!");
+      alert("Login succesfull!");
     } else {
-      error = "Falsche E-Mail oder Passwort";
+      error = response?.message || "Wrong Username oder Password";
     }
+  });
+}
+  function logout() {
+    localStorage.removeItem("session");
+    cookie = null;
+    isLoggedIn = false;
   }
 
   function handleKey(e) {
@@ -30,19 +96,9 @@
   <div class="card">
     <h1>Login</h1>
 
-    <input
-      type="email"
-      placeholder="E-Mail"
-      bind:value={email}
-      on:keydown={handleKey}
-    />
+    <input type="text" placeholder="username" bind:value={username} />
 
-    <input
-      type="password"
-      placeholder="Passwort"
-      bind:value={password}
-      on:keydown={handleKey}
-    />
+    <input type="password" placeholder="Passwort" bind:value={password} />
 
     {#if error}
       <p class="error">{error}</p>
@@ -58,9 +114,11 @@
 
 <style>
   main {
+    height: 100vh;
     display: flex;
     justify-content: center;
     align-items: flex-start;
+    background: #2f2f2f;
     font-family: Arial, sans-serif;
   }
 
@@ -72,7 +130,6 @@
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
     text-align: center;
     color: rgb(255, 255, 255);
-    margin-top: 80px;
   }
 
   h1 {
@@ -83,7 +140,7 @@
     width: 100%;
     box-sizing: border-box;
     padding: 0.75rem;
-    margin-bottom: 1.2rem;
+    margin-bottom: 1rem;
     border-radius: 8px;
     border: 1px solid #ccc;
     font-size: 1rem;
@@ -128,13 +185,5 @@
 
   .link:hover {
     text-decoration: underline;
-  }
-
-  .containerLinks {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-top: 10px;
-    gap: 20px;
   }
 </style>
