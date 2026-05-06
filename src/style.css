@@ -110,7 +110,7 @@ button:active {
   top: 0;
   z-index: 1000;
   padding: 1rem 1.5rem;
-  background-color: rgb(201, 131, 74);
+  background-color: #cc732b;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 5px;
 }
@@ -619,6 +619,8 @@ button:active {
 .button-return {
   background-color: #b13e3e;
   color: #ffffff;
+  display: block;
+  width: 120px;
 }
 
 /* Misc */
@@ -626,6 +628,14 @@ button:active {
 .container {
   display: flex;
   flex-direction: column;
+}
+
+.registercontainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
 }
 
 /* Mobile */
