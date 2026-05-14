@@ -2,27 +2,17 @@
   import { io } from "socket.io-client";
   import { onMount, onDestroy } from "svelte";
   import "../../style.css";
+  import { login as doLogin, isLoggedIn } from "$lib/auth.js";
+  import { get } from "svelte/store";
 
   let username = "";
   let password = "";
   let error = "";
   let socket = io("ws://127.0.0.1:3000/login");;
   let connected = false;
-  let isLoggedIn = false;
-  let cookie = null;
+  // let cookie = null;
 
   onMount(() => {
-    const saved = localStorage.getItem("session")
-    if(saved){
-      try {
-          cookie = JSON.parse(saved);
-          isLoggedIn = true;
-          console.log("Already logged in");
-      } catch(e) {
-        console.log("Something went wrong!");
-        localStorage.removeItem("session");
-      }
-    }
     socket.on("connect", () => {
       console.log("Connected with server /login!");
       connected = true;
@@ -65,13 +55,12 @@
     console.log("Server:", response);
 
     if (response?.session_id && response.signature) {
-      cookie = {
+      const newCookie = {
         session_id: Array.from(response.session_id),
         signature: Array.from(response.signature)
       }
       
-      localStorage.setItem("session", JSON.stringify(cookie));
-      isLoggedIn = true;
+      doLogin(newCookie);
       error = "";
       alert("Login succesfull!");
     } else {
@@ -79,11 +68,6 @@
     }
   });
 }
-  function logout() {
-    localStorage.removeItem("session");
-    cookie = null;
-    isLoggedIn = false;
-  }
 
   function handleKey(e) {
     if (e.key === "Enter") {

@@ -3,6 +3,7 @@
   import { fly } from 'svelte/transition';
   import { slide } from 'svelte/transition';
   import { flip } from 'svelte/animate';
+  import { isLoggedIn } from '$lib/auth.js';
 
   let openAttachment = false;
 
@@ -23,6 +24,8 @@
   /** @type {HTMLInputElement | undefined} */
   let fileInput;
 
+  let searchOpen = false;
+
   function toggleAttachmentMenu() {
     openAttachment = !openAttachment;
   }
@@ -38,6 +41,10 @@
     closeAttachmentMenu();
     fileInput.accept = accept;
     fileInput.click();
+  }
+
+  function toggleSearchBar() {
+    searchOpen = !searchOpen;
   }
 
   function handleFileChange(event) {
@@ -97,9 +104,22 @@
 />
 
 <main class="site-main chat-page">
+{#if $isLoggedIn}
   <div class:attachment={openAttachment} class="chat-layout">
     <aside class="friends">
-      <h2>Freunde</h2>
+    <div class="friends-header">
+      <h2>Friends</h2>
+      <button on:click={toggleSearchBar} class="user-button">
+        <img src="src//img/search.png" class="icons-search">
+      </button>
+    </div>
+
+     {#if searchOpen}
+        <div class="search-bar" transition:slide>
+          <input type="text" placeholder="Search friends..." class="search-input">
+        </div>
+     {/if}
+
     </aside>
 
     <section class="chat-history">
@@ -170,6 +190,12 @@
       <img class="lightbox-img" src={lightbox.url} alt={lightbox.name} on:click|stopPropagation />
       <button class="lightbox-close" on:click={closeLightbox}>✕</button>
     </div>
-{/if}
+  {/if}
 
+{:else}
+  <div class="chat-layout">
+    <p class="chat-placeholder">Please log in to access the chat.</p>
+  </div>
+{/if}
 </main>
+

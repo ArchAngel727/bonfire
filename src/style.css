@@ -139,6 +139,50 @@ button:active {
   gap: 1rem;
 }
 
+.user-menu-wrapper {
+  position: relative;
+  display: inline-block;
+  margin-left: auto;
+}
+
+.user-button {
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.user-button:hover {
+  border: none;
+  background-color: transparent;
+}
+
+.icons {
+  padding-top: 0.23rem;
+  display: block;
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+}
+
+.user-menu {
+  position: absolute;
+  top: calc(100% + 0.75rem);
+  right: 0;
+  z-index: 100;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem;
+  gap: 0.5rem;
+  background: #242424;
+  border: 2px solid #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
 #logo-header {
   width: clamp(32px, 5vw, 50px);
   height: auto;
@@ -440,14 +484,50 @@ button:active {
 
 .friends {
   grid-area: friends;
-  padding: 2rem;
+  padding-left: 2rem;
+  padding-right: 2rem;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
   border-right: 3px solid #ffffff;
   min-width: 0;
 }
 
+.friends-header {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.icons-search {
+  display: block;
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+}
+
+.search-bar {
+  margin-top: 0.75rem;
+  width: 100%;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background-color: #333333;
+  color: #ffffff;
+  border: 1px solid #555;
+}
+
+.search-input:focus {
+  border-color: #cc732b;
+}
+
 .chat-history {
   grid-area: history;
-  padding: 2rem;
+  padding-left: 2rem;
+  padding-right: 2rem;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
   border-bottom: 3px solid #ffffff;
   min-width: 0;
 }
@@ -459,6 +539,12 @@ button:active {
   align-items: stretch;
   border-right: 3px solid #ffffff;
   min-width: 0;
+}
+
+.chat-input-field:focus {
+  border: 0.5px solid;
+  border-color: #cc732b;
+  outline: none;
 }
 
 .chat-input-field {

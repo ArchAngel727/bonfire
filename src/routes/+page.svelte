@@ -43,7 +43,6 @@
       <div class="popup-buttons">
       <button class="button-main2" onclick={() => goto("/register")}>Register</button>
       <button class="button-main2" onclick={() => goto("/login")}>Login</button>
-      <button class="button-main2" onclick={() => goto("/chat")}>Go to Chat</button>
       <button class="top-left-btn" onclick={closePopup}>X</button>
       </div>
     </div>
