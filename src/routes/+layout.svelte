@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import { isLoggedIn, logout } from '$lib/auth.js';
   import { fly } from 'svelte/transition';
+  import { goto } from '$app/navigation';
 
   let showUserMenu = false;
   let userMenuWrapper;
@@ -43,7 +44,10 @@
 
           {#if showUserMenu}
             <div class="user-menu" transition:fly={{ y: -10, duration: 250 }}>
-              <button class="user-menu-item" on:click={() => { logout(); closeUserMenu(); }}>
+              <button class="user-menu-item" on:click={() => (showUserMenu = false, goto('/user'))}>
+                Profile
+              </button>
+              <button class="user-menu-item" on:click={() => { logout(); closeUserMenu(); goto('/'); }}>
                 Logout
               </button>
             </div>

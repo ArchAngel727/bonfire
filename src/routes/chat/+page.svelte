@@ -4,8 +4,14 @@
   import { slide } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import { isLoggedIn } from '$lib/auth.js';
+  import { goto } from '$app/navigation';
+  import { blur } from 'svelte/transition';
+  import { friends } from "$lib/mock/friends";
+  import { messages } from "$lib/mock/messages";
+
 
   let openAttachment = false;
+  let selectedFriend = friends[0];
 
   /** @type {File[]} */
   let files = [];
@@ -25,6 +31,10 @@
   let fileInput;
 
   let searchOpen = false;
+
+  function selectFriend(friend) {
+    selectedFriend = friend;
+  }
 
   function toggleAttachmentMenu() {
     openAttachment = !openAttachment;
@@ -100,7 +110,7 @@
   type="file"
   multiple
   hidden
-  on:change={handleFileChange}
+  on:change={handleFileChange} 
 />
 
 <main class="site-main chat-page">
@@ -114,6 +124,44 @@
       </button>
     </div>
 
+    <div class="friends-list">
+
+  {#each friends as friend}
+
+    <div
+      class:selected={selectedFriend.id === friend.id}
+      class="friend-item"
+      on:click={() => selectFriend(friend)}
+    >
+
+      <img
+        class="friend-avatar"
+        src={friend.avatar}
+        alt={friend.username}
+      />
+
+      <div class="friend-info">
+
+        <div class="friend-top">
+
+          <h3>{friend.username}</h3>
+
+          {#if friend.online}
+            <span class="online-dot"></span>
+          {/if}
+
+        </div>
+
+      </div>
+
+      
+
+    </div>
+
+  {/each}
+
+</div>
+
      {#if searchOpen}
         <div class="search-bar" transition:slide>
           <input type="text" placeholder="Search friends..." class="search-input">
@@ -123,8 +171,46 @@
     </aside>
 
     <section class="chat-history">
-      <h2>Username</h2>
-    </section>
+
+  <div class="chat-header">
+
+  <h2>{selectedFriend.username}</h2>
+
+  <span class="chat-status">
+    {selectedFriend.online ? "online" : "offline"}
+  </span>
+
+  </div>
+
+  <div class="messages">
+
+  {#each selectedFriend.messages as message}
+
+    <div
+    class:own={message.own}
+    class="message-row"
+  >
+    <div class="message-timeandauthor">
+    <span class="message-author">
+      {message.own ? "You" : selectedFriend.username}
+    </span>
+
+    <span class="message-time">
+      {message.time}
+    </span>
+    </div>
+
+    <span class="message-text">
+      {message.text}
+    </span>
+
+  </div>
+
+  {/each}
+
+</div>
+
+</section>
 
   <div class="preview-bar">
   {#each previews as preview, i (preview.url)}
@@ -193,8 +279,12 @@
   {/if}
 
 {:else}
-  <div class="chat-layout">
-    <p class="chat-placeholder">Please log in to access the chat.</p>
+  <div class="popup-overlay2" transition:blur={{ duration: 400 }}>
+    <h2>Please log in or register to access the chat</h2>
+    <div class="popup-buttons">
+    <button class="button-main2" on:click={() => goto("/register")}>Register</button>
+    <button class="button-main2" on:click={() => goto("/login")}>Login</button>
+    </div>
   </div>
 {/if}
 </main>

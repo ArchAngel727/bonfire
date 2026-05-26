@@ -101,6 +101,7 @@
         <input id="confirmpassword" type="password" bind:value={confirmpassword} />
       </div>
 
+    <div class="buttons">
     <button class="button-main" type="submit" disabled={loading}>
       {#if loading}
         Loading...
@@ -110,11 +111,12 @@
         Continue
       {/if}
     </button>
+    <button class="button-return" onclick={() => goto("/")}>Go back</button>
+    </div>
   </form>
 
   {#if message}
     <h3>{message}</h3>
   {/if}
 
-  <button class="button-return" onclick={() => goto("/")}>Go back</button>
 </main>

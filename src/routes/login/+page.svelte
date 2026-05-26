@@ -4,6 +4,8 @@
   import "../../style.css";
   import { login as doLogin, isLoggedIn } from "$lib/auth.js";
   import { get } from "svelte/store";
+  import { goto } from "$app/navigation";
+  import { writable } from "svelte/store";
 
   let username = "";
   let password = "";
@@ -63,6 +65,7 @@
       doLogin(newCookie);
       error = "";
       alert("Login succesfull!");
+      goto("/");
     } else {
       error = response?.message || "Wrong Username oder Password";
     }
@@ -74,6 +77,11 @@
       login();
     }
   }
+
+  export const user = writable({
+    username: "",
+  })
+
 </script>
 
 <main>
