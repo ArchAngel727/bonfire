@@ -2,29 +2,30 @@
   import { io } from "socket.io-client";
   import { onMount, onDestroy } from "svelte";
   import "../../style.css";
+  import { goto } from "$app/navigation";
 
   let username = "";
   let password = "";
   let error = "";
-  let socket = io("ws://127.0.0.1:3000/login");;
+  let socket = io("ws://127.0.0.1:3000/login");
   let connected = false;
   let isLoggedIn = false;
   let cookie = null;
 
   onMount(() => {
-    const saved = localStorage.getItem("session")
-    if(saved){
+    const saved = localStorage.getItem("session");
+
+    if (saved) {
       try {
-          cookie = JSON.parse(saved);
-          isLoggedIn = true;
-          console.log("Already logged in");
-      } catch(e) {
-        console.log("Something went wrong!");
+        cookie = JSON.parse(saved);
+        isLoggedIn = true;
+        goto("/chat");
+      } catch (e) {
         localStorage.removeItem("session");
       }
     }
+
     socket.on("connect", () => {
-      console.log("Connected with server /login!");
       connected = true;
     });
 
@@ -43,42 +44,44 @@
   });
 
   function login() {
-  if (!username || !password) {
-    error = "Username or Password missing!";
-    return;
-  }
-
-  if (!connected) {
-    error = "Can't reach server";
-    return;
-  }
-
-  console.log("Login with:", { username, password });
-
-  const timeout = setTimeout(() => {
-    console.log("Server Timeout");
-    error = "Server Timeout";
-  }, 5000);
-
-  socket.emit("login", { username, password }, (response) => {
-    clearTimeout(timeout);
-    console.log("Server:", response);
-
-    if (response?.session_id && response.signature) {
-      cookie = {
-        session_id: Array.from(response.session_id),
-        signature: Array.from(response.signature)
-      }
-      
-      localStorage.setItem("session", JSON.stringify(cookie));
-      isLoggedIn = true;
-      error = "";
-      alert("Login succesfull!");
-    } else {
-      error = response?.message || "Wrong Username oder Password";
+    if (!username || !password) {
+      error = "Username or Password missing!";
+      return;
     }
-  });
-}
+
+    if (!connected) {
+      error = "Can't reach server";
+      return;
+    }
+
+    console.log("Login with:", { username, password });
+
+    const timeout = setTimeout(() => {
+      console.log("Server Timeout");
+      error = "Server Timeout";
+    }, 5000);
+
+    socket.emit("login", { username, password }, (response) => {
+      clearTimeout(timeout);
+      console.log("Server:", response);
+
+      if (response?.session_id && response.signature) {
+        cookie = {
+          session_id: Array.from(response.session_id),
+          signature: Array.from(response.signature),
+        };
+
+        localStorage.setItem("session", JSON.stringify(cookie));
+        isLoggedIn = true;
+        error = "";
+        goto("/chat");
+        alert("Login succesfull!");
+      } else {
+        error = response?.message || "Wrong Username oder Password";
+      }
+    });
+  }
+
   function logout() {
     localStorage.removeItem("session");
     cookie = null;
