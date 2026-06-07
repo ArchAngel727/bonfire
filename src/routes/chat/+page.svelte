@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { fly } from "svelte/transition";
   import { flip } from "svelte/animate";
   import { io } from "socket.io-client";
@@ -15,8 +15,11 @@
   let dms = [];
   let textChannels = [];
   let currentChannelId = null;
-  let messages = [];
+  let messagesByChannel = new Map(); // channel_id → ChannelMessage[]
+  let unread = new Set();
   let messageText = "";
+
+  $: messages = messagesByChannel.get(currentChannelId) ?? [];
 
   // attachment ui state
   let openAttachment = false;
@@ -25,9 +28,47 @@
   let lightbox = null;
   let attachmentMenu;
   let fileInput;
+  let messagesEl;
+
+  // Auto-scroll to bottom whenever the visible message list changes.
+  // Only when the user is already near the bottom — if they've scrolled up
+  // to read history, don't yank them back down.
+  let stickToBottom = true;
+  function onMessagesScroll() {
+    if (!messagesEl) return;
+    const distFromBottom =
+      messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+    stickToBottom = distFromBottom < 50;
+  }
+  $: if (messages && messagesEl && stickToBottom) {
+    tick().then(() => {
+      messagesEl?.scrollTo({ top: messagesEl.scrollHeight });
+    });
+  }
 
   function decodeContent(bytes) {
     return new TextDecoder().decode(new Uint8Array(bytes));
+  }
+
+  function appendMessage(msg) {
+    const list = messagesByChannel.get(msg.channel_id) ?? [];
+    if (list.some((m) => m.message_id === msg.message_id)) return; // dedupe
+    messagesByChannel.set(msg.channel_id, [...list, msg]);
+    messagesByChannel = messagesByChannel; // trigger Svelte reactivity
+  }
+
+  function setMessages(channel_id, msgs) {
+    messagesByChannel.set(channel_id, msgs);
+    messagesByChannel = messagesByChannel;
+  }
+
+  function markUnread(channel_id) {
+    unread.add(channel_id);
+    unread = unread;
+  }
+
+  function clearUnread(channel_id) {
+    if (unread.delete(channel_id)) unread = unread;
   }
 
   function dmLabel(ch) {
@@ -54,11 +95,12 @@
 
   function openChannel(channel_id) {
     currentChannelId = channel_id;
-    messages = [];
+    clearUnread(channel_id);
+    stickToBottom = true;
     channelSock.emit("channel_sync", { channel_id }, (res) => {
       if (res.status !== "ok") return console.error(res.reason);
       if (currentChannelId !== channel_id) return;
-      messages = res.messages;
+      setMessages(channel_id, res.messages);
     });
   }
 
@@ -72,7 +114,7 @@
       { channel_id: currentChannelId, content },
       (res) => {
         if (res.status !== "ok") return console.error(res.reason);
-        messages = [...messages, res.message];
+        appendMessage(res.message);
       },
     );
   }
@@ -186,6 +228,9 @@
       return;
     }
 
+    window.dms = () => dms;
+    window.me = () => myUserId;
+
     channelSock = io("http://localhost:3000/channel", { auth: cookie });
     adminSock = io("http://localhost:3000/admin", { auth: cookie });
 
@@ -220,8 +265,9 @@
     });
 
     channelSock.on("channel_message", (msg) => {
-      if (msg.channel_id === currentChannelId) {
-        messages = [...messages, msg];
+      appendMessage(msg);
+      if (msg.channel_id !== currentChannelId) {
+        markUnread(msg.channel_id);
       }
     });
 
@@ -265,9 +311,11 @@
         <button
           class="dm-item"
           class:active={currentChannelId === ch.channel_id}
+          class:has-unread={unread.has(ch.channel_id)}
           on:click={() => openChannel(ch.channel_id)}
         >
           #{ch.name}
+          {#if unread.has(ch.channel_id)}<span class="unread-dot">●</span>{/if}
         </button>
       {/each}
 
@@ -279,18 +327,19 @@
         <button
           class="dm-item"
           class:active={currentChannelId === ch.channel_id}
+          class:has-unread={unread.has(ch.channel_id)}
           on:click={() => openChannel(ch.channel_id)}
         >
-          @{dmLabel(ch)}
+          @{(myUserId, dmLabel(ch))}
+          {#if unread.has(ch.channel_id)}<span class="unread-dot">●</span>{/if}
         </button>
       {/each}
-
       <button class="logout-btn" on:click={logout}>Log out</button>
     </aside>
 
     <section class="chat-history">
       <h2>{currentChannelLabel()}</h2>
-      <div class="messages">
+      <div class="messages" bind:this={messagesEl} on:scroll={onMessagesScroll}>
         {#each messages as msg (msg.message_id)}
           <div class="message" class:mine={msg.author_id === myUserId}>
             <div class="message-meta">
@@ -399,3 +448,5 @@
     </div>
   {/if}
 </main>
+
+<!-- -->
