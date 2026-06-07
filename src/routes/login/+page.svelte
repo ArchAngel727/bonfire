@@ -122,6 +122,7 @@
     justify-content: center;
     align-items: flex-start;
     font-family: Arial, sans-serif;
+    
   }
 
   .card {
