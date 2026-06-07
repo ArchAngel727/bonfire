@@ -27,7 +27,7 @@ body {
 /* Typography */
 
 h1 {
-  margin: 0;a
+  margin: 0;
   font-family: 'Poppins', sans-serif;
   font-size: clamp(2.25rem, 5vw, 3.75rem);
   line-height: 1.1;
