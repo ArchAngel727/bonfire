@@ -12,6 +12,7 @@
   let isLoggedIn = false;
   let cookie = null;
 
+
   onMount(() => {
     const saved = localStorage.getItem("session");
 
@@ -69,9 +70,11 @@
         cookie = {
           session_id: Array.from(response.session_id),
           signature: Array.from(response.signature),
+
         };
 
         localStorage.setItem("session", JSON.stringify(cookie));
+        localStorage.setItem("username", username);
         isLoggedIn = true;
         error = "";
         goto("/chat");
@@ -84,6 +87,7 @@
 
   function logout() {
     localStorage.removeItem("session");
+    //localStorage.removeItem("username");
     cookie = null;
     isLoggedIn = false;
   }
@@ -122,7 +126,7 @@
     justify-content: center;
     align-items: flex-start;
     font-family: Arial, sans-serif;
-    
+
   }
 
   .card {

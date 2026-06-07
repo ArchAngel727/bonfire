@@ -11,6 +11,7 @@
   let myUserId = null;
   let isAdmin = false;
   let isMod = false;
+  let myUserName = localStorage.getItem("username");
 
   let dms = [];
   let textChannels = [];
@@ -381,6 +382,7 @@
         <h2>Freunde</h2>
         <button class="add-btn" on:click={newDm} title="New DM">+</button>
       </div>
+
       {#each dmsLabeled as ch (ch.channel_id)}
         <button
           class="dm-item"
@@ -394,6 +396,9 @@
       {/each}
 
       <button class="logout-btn" on:click={logout}>Log out</button>
+      <div>
+          <a href="/profile"><h2 class="profile">{myUserName}</h2></a>
+      </div>
     </aside>
 
     <section class="chat-history">
@@ -698,4 +703,9 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
+
+  .profile {
+    margin-top: 500px;
+  }
+
 </style>
