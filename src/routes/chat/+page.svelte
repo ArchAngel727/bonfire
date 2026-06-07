@@ -19,7 +19,29 @@
   let unread = new Set();
   let messageText = "";
 
+  // "connecting" | "connected" | "reconnecting" | "disconnected"
+  let connectionState = "connecting";
+
   $: messages = messagesByChannel.get(currentChannelId) ?? [];
+
+  // Reactive labels — Svelte 4 needs explicit reads of myUserId here so the
+  // template re-runs when my_role lands after channel_list.
+  $: dmsLabeled = dms.map((ch) => {
+    let label = "??";
+    if (ch.dm_user_low === myUserId) label = ch.dm_user_high_username ?? "??";
+    else if (ch.dm_user_high === myUserId)
+      label = ch.dm_user_low_username ?? "??";
+    return { ...ch, _label: label };
+  });
+
+  $: currentLabel = (() => {
+    if (!currentChannelId) return "Select a chat";
+    const tc = textChannels.find((c) => c.channel_id === currentChannelId);
+    if (tc) return `#${tc.name}`;
+    const dm = dmsLabeled.find((c) => c.channel_id === currentChannelId);
+    if (dm) return `@${dm._label}`;
+    return "??";
+  })();
 
   // attachment ui state
   let openAttachment = false;
@@ -69,6 +91,18 @@
 
   function clearUnread(channel_id) {
     if (unread.delete(channel_id)) unread = unread;
+  }
+
+  function addChannel(ch) {
+    if (ch.kind === "dm") {
+      if (!dms.some((c) => c.channel_id === ch.channel_id)) {
+        dms = [...dms, ch];
+      }
+    } else if (ch.kind === "text") {
+      if (!textChannels.some((c) => c.channel_id === ch.channel_id)) {
+        textChannels = [...textChannels, ch];
+      }
+    }
   }
 
   function dmLabel(ch) {
@@ -131,6 +165,7 @@
         (res) => {
           if (res.status !== "ok")
             return alert(`create DM failed: ${res.reason}`);
+          addChannel(res.channel);
           openChannel(res.channel.channel_id);
         },
       );
@@ -145,6 +180,7 @@
       { kind: "text", name: name.trim() },
       (res) => {
         if (res.status !== "ok") return alert(`create failed: ${res.reason}`);
+        addChannel(res.channel);
         openChannel(res.channel.channel_id);
       },
     );
@@ -154,6 +190,17 @@
     localStorage.removeItem("session");
     channelSock?.disconnect();
     adminSock?.disconnect();
+    channelSock = null;
+    adminSock = null;
+    myUserId = null;
+    isAdmin = false;
+    isMod = false;
+    dms = [];
+    textChannels = [];
+    currentChannelId = null;
+    messagesByChannel = new Map();
+    unread = new Set();
+    messageText = "";
     goto("/login");
   }
 
@@ -228,9 +275,6 @@
       return;
     }
 
-    window.dms = () => dms;
-    window.me = () => myUserId;
-
     channelSock = io("http://localhost:3000/channel", { auth: cookie });
     adminSock = io("http://localhost:3000/admin", { auth: cookie });
 
@@ -240,7 +284,18 @@
       if (/AUTH_REQUIRED|SESSION_INVALID|SESSION_EXPIRED/.test(msg)) {
         localStorage.removeItem("session");
         goto("/login");
+      } else {
+        connectionState = "reconnecting";
       }
+    });
+
+    channelSock.on("disconnect", (reason) => {
+      // "io client disconnect" means we called .disconnect() ourselves (logout) — don't show banner.
+      if (reason !== "io client disconnect") connectionState = "reconnecting";
+    });
+
+    channelSock.io.on("reconnect_attempt", () => {
+      connectionState = "reconnecting";
     });
 
     adminSock.on("connect_error", (e) =>
@@ -248,6 +303,7 @@
     );
 
     channelSock.on("connect", () => {
+      connectionState = "connected";
       channelSock.emit("channel_list", {}, (res) => {
         if (res.status !== "ok") return console.error(res.reason);
         dms = res.channels.filter((c) => c.kind === "dm");
@@ -272,8 +328,7 @@
     });
 
     channelSock.on("channel_created", (ch) => {
-      if (ch.kind === "dm") dms = [...dms, ch];
-      else if (ch.kind === "text") textChannels = [...textChannels, ch];
+      addChannel(ch);
     });
 
     document.addEventListener("click", handleClick);
@@ -295,6 +350,9 @@
 />
 
 <main class="site-main chat-page">
+  {#if connectionState === "reconnecting"}
+    <div class="connection-banner">Reconnecting…</div>
+  {/if}
   <div class:attachment={openAttachment} class="chat-layout">
     <aside class="friends">
       <div class="sidebar-header">
@@ -323,34 +381,45 @@
         <h2>Freunde</h2>
         <button class="add-btn" on:click={newDm} title="New DM">+</button>
       </div>
-      {#each dms as ch (ch.channel_id)}
+      {#each dmsLabeled as ch (ch.channel_id)}
         <button
           class="dm-item"
           class:active={currentChannelId === ch.channel_id}
           class:has-unread={unread.has(ch.channel_id)}
           on:click={() => openChannel(ch.channel_id)}
         >
-          @{(myUserId, dmLabel(ch))}
+          @{ch._label}
           {#if unread.has(ch.channel_id)}<span class="unread-dot">●</span>{/if}
         </button>
       {/each}
+
       <button class="logout-btn" on:click={logout}>Log out</button>
     </aside>
 
     <section class="chat-history">
-      <h2>{currentChannelLabel()}</h2>
+      <h2>{currentLabel}</h2>
       <div class="messages" bind:this={messagesEl} on:scroll={onMessagesScroll}>
-        {#each messages as msg (msg.message_id)}
-          <div class="message" class:mine={msg.author_id === myUserId}>
-            <div class="message-meta">
-              <span class="message-author">
-                {msg.author_id === myUserId ? "Me" : msg.author_username}
-              </span>
-              <span class="message-time">{shortTime(msg.created_at)}</span>
-            </div>
-            <div class="message-body">{decodeContent(msg.content)}</div>
+        {#if !currentChannelId}
+          <div class="empty-state">
+            <p class="empty-state-title">No chat selected</p>
+            <p class="empty-state-hint">
+              Pick a conversation from the sidebar, or click + to start a new
+              one.
+            </p>
           </div>
-        {/each}
+        {:else}
+          {#each messages as msg (msg.message_id)}
+            <div class="message" class:mine={msg.author_id === myUserId}>
+              <div class="message-meta">
+                <span class="message-author">
+                  {msg.author_id === myUserId ? "Me" : msg.author_username}
+                </span>
+                <span class="message-time">{shortTime(msg.created_at)}</span>
+              </div>
+              <div class="message-body">{decodeContent(msg.content)}</div>
+            </div>
+          {/each}
+        {/if}
       </div>
     </section>
 
@@ -449,4 +518,184 @@
   {/if}
 </main>
 
-<!-- -->
+<style>
+  /* ─── Sidebar — section headers and add buttons (new elements) ─── */
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0.5rem 0.25rem;
+    margin-top: 0.5rem;
+  }
+  .sidebar-header h2 {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #888;
+  }
+
+  .add-btn {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
+  .add-btn:hover {
+    background: rgba(255, 140, 50, 0.15);
+    color: #ff8c32;
+  }
+
+  /* ─── Channel/DM items — additive on top of existing .dm-item ─── */
+  .dm-item.active {
+    background: rgba(255, 140, 50, 0.18);
+    color: #ff8c32;
+  }
+  .dm-item.has-unread:not(.active) {
+    color: #fff;
+    font-weight: 600;
+  }
+  .unread-dot {
+    color: #ff8c32;
+    margin-left: 0.4rem;
+    font-size: 0.65rem;
+  }
+
+  /* ─── Logout button (new element) ─── */
+  .logout-btn {
+    margin: auto 0.5rem 0.5rem;
+    padding: 0.5rem;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #888;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition:
+      background 0.15s,
+      color 0.15s,
+      border-color 0.15s;
+  }
+  .logout-btn:hover {
+    background: rgba(255, 80, 80, 0.1);
+    border-color: rgba(255, 80, 80, 0.3);
+    color: #ff8888;
+  }
+
+  /* ─── Messages — internal scroll, visual tint only, no layout fights ─── */
+  .messages {
+    max-height: calc(100vh - 320px);
+    overflow-y: auto;
+  }
+
+  /* Bubble shape — explicit flex column so meta + body are guaranteed
+     inside the bubble, regardless of what global CSS does to children. */
+  .message {
+    display: flex !important;
+    flex-direction: column !important;
+    width: fit-content !important;
+    max-width: 70% !important;
+    margin: 0.25rem 0.75rem !important;
+    padding: 0.5rem 0.8rem !important;
+    border-radius: 10px !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+  }
+  .message.mine {
+    background: rgba(255, 140, 50, 0.15) !important;
+    align-self: flex-end !important;
+    margin-left: auto !important;
+  }
+  .message:not(.mine) {
+    align-self: flex-start !important;
+    margin-right: auto !important;
+  }
+
+  /* The container needs flex column for align-self to work on bubbles. */
+  .messages {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.1rem;
+  }
+
+  .message-author {
+    color: #ff8c32;
+    font-weight: 600;
+  }
+  .message-time {
+    color: #777;
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+  }
+
+  /* ─── Empty state (new element) ─── */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 240px;
+    text-align: center;
+    color: #888;
+    padding: 2rem;
+  }
+  .empty-state::before {
+    content: "🔥";
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.4;
+  }
+  .empty-state-title {
+    font-size: 1.1rem;
+    margin: 0 0 0.5rem 0;
+    color: #aaa;
+    font-weight: 600;
+  }
+  .empty-state-hint {
+    margin: 0;
+    font-size: 0.9rem;
+    max-width: 28rem;
+  }
+
+  /* ─── Reconnect banner (new element) ─── */
+  .connection-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 0.4rem;
+    text-align: center;
+    background: #c97a2a;
+    color: white;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  .connection-banner::before {
+    content: "⟳ ";
+    display: inline-block;
+    animation: spin 1.5s linear infinite;
+  }
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* ─── Disabled states (visual hint only, no layout change) ─── */
+  .chat-input-field:disabled,
+  .button-chat:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>
