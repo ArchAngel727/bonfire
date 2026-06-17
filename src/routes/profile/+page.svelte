@@ -1,233 +1,306 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { goto } from "$app/navigation";
+  import { io } from "socket.io-client";
 
-    //wenn backend fertig ist dann function onMount save und avatar format ändern
+  let profile = null;
+  let loading = true;
+  let loadError = null;
 
+  let oldPassword = "";
+  let newPassword = "";
+  let confirmPassword = "";
+  let pwMessage = null; // { kind: "ok" | "error", text: string }
+  let pwSubmitting = false;
 
-  let myUsername = null;
-  let bio = "";
-  let avatarUrl = "";   // später fürs backend um das bild hochzulanden
+  let adminSock;
 
-  let saved = false;    //gespeichert von user
-  let fileInput;
+  function readCookie() {
+    if (typeof localStorage === "undefined") return null;
+    const raw = localStorage.getItem("session");
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  function roleLabel(p) {
+    if (!p) return "";
+    if (p.is_admin) return "Admin";
+    if (p.is_mod) return "Moderator";
+    return "User";
+  }
+
+  function loadProfile() {
+    adminSock.emit("get_profile", {}, (res) => {
+      if (res.status !== "ok") {
+        loadError = res.reason ?? "failed to load profile";
+        loading = false;
+        return;
+      }
+      profile = res;
+      loading = false;
+    });
+  }
+
+  function handleChangePassword() {
+    pwMessage = null;
+    if (!oldPassword || !newPassword) {
+      pwMessage = { kind: "error", text: "fill in both password fields" };
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      pwMessage = { kind: "error", text: "new passwords don't match" };
+      return;
+    }
+    if (newPassword.length < 6) {
+      pwMessage = { kind: "error", text: "new password must be at least 6 characters" };
+      return;
+    }
+
+    pwSubmitting = true;
+    adminSock.emit(
+      "change_password",
+      { old_password: oldPassword, new_password: newPassword },
+      (res) => {
+        pwSubmitting = false;
+        if (res.status !== "ok") {
+          pwMessage = { kind: "error", text: res.reason ?? "change failed" };
+          return;
+        }
+        pwMessage = { kind: "ok", text: "password updated" };
+        oldPassword = "";
+        newPassword = "";
+        confirmPassword = "";
+      }
+    );
+  }
 
   onMount(() => {
-    if (!localStorage.getItem("session")) {
+    const cookie = readCookie();
+    if (!cookie) {
       goto("/login");
       return;
     }
-    myUsername = localStorage.getItem("username");
-    bio = localStorage.getItem("profileBio") ?? "";
-    avatarUrl = localStorage.getItem("profileAvatar") ?? "";
+
+    adminSock = io("http://localhost:3000/admin", { auth: cookie });
+
+    adminSock.on("connect_error", (e) => {
+      const msg = e.message ?? "";
+      if (/AUTH_REQUIRED|SESSION_INVALID|SESSION_EXPIRED/.test(msg)) {
+        localStorage.removeItem("session");
+        goto("/login");
+      } else {
+        loadError = msg || "connection failed";
+        loading = false;
+      }
+    });
+
+    adminSock.on("connect", () => {
+      loadProfile();
+    });
   });
 
-  function handleAvatarChange(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      alert("Bitte ein Bild auswählen.");
-      return;
-    }
-    // In Data-URL umwandeln, damit wir es in localStorage ablegen können.
-    const reader = new FileReader();
-    reader.onload = () => {
-      avatarUrl = reader.result;
-    };
-    reader.readAsDataURL(file);
-  }
-
-  function removeAvatar() {
-    avatarUrl = "";
-    if (fileInput) fileInput.value = "";
-  }
-
-
-//nur zum testen hier noch backend  
-  function save() {
-    try {
-      localStorage.setItem("profileBio", bio);
-      if (avatarUrl) {
-        localStorage.setItem("profileAvatar", avatarUrl);
-      } else {
-        localStorage.removeItem("profileAvatar");
-      }
-      saved = true;
-      setTimeout(() => (saved = false), 1500);
-    } catch (e) {
-      alert("Speichern fehlgeschlagen (Bild evtl. zu groß).");
-      console.error(e);
-    }
-  }
+  onDestroy(() => {
+    adminSock?.disconnect();
+  });
 </script>
 
-<main class="profilePage">
-  <a href="/chat" class="back">← Zurück zum Chat</a>
+<main class="profile-page">
+  <header class="profile-header">
+    <button class="back-btn" on:click={() => goto("/")}>← Back to chat</button>
+    <h1>Profile</h1>
+  </header>
 
-  <h1>Mein Profil</h1>
+  {#if loading}
+    <p class="status">Loading…</p>
+  {:else if loadError}
+    <p class="status error">{loadError}</p>
+  {:else if profile}
+    <section class="card">
+      <h2>Account</h2>
+      <dl class="info">
+        <dt>Username</dt>
+        <dd>{profile.username}</dd>
 
-  <div class="profilePicture">
-    {#if avatarUrl}
-      <img class="avatar" src={avatarUrl} alt="Avatar" />
-    {:else}
-      <div class="avatar avatar-placeholder">
-        {myUsername ? myUsername[0].toUpperCase() : "?"}
+        <dt>Role</dt>
+        <dd>{roleLabel(profile)}</dd>
+
+        <dt>User ID</dt>
+        <dd class="mono">{profile.user_id}</dd>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>Change password</h2>
+      <div class="form">
+        <label>
+          Current password
+          <input
+            type="password"
+            bind:value={oldPassword}
+            autocomplete="current-password"
+          />
+        </label>
+        <label>
+          New password
+          <input
+            type="password"
+            bind:value={newPassword}
+            autocomplete="new-password"
+          />
+        </label>
+        <label>
+          Confirm new password
+          <input
+            type="password"
+            bind:value={confirmPassword}
+            autocomplete="new-password"
+          />
+        </label>
+        <button class="primary" disabled={pwSubmitting} on:click={handleChangePassword}>
+          {pwSubmitting ? "Updating…" : "Update password"}
+        </button>
+        {#if pwMessage}
+          <p class="form-message {pwMessage.kind}">{pwMessage.text}</p>
+        {/if}
       </div>
-    {/if}
-
-    <div class="profilePictureButtons">
-      <button on:click={() => fileInput.click()}>Bild auswählen</button>
-      {#if avatarUrl}
-        <button class="secondary" on:click={removeAvatar}>Entfernen</button>
-      {/if}
-    </div>
-    <input
-      bind:this={fileInput}
-      type="file"
-      accept="image/*"
-      hidden
-      on:change={handleAvatarChange}
-    />
-  </div>
-
-  <label class="fieldInput">
-    <span>Username</span>
-    <input type="text" value={myUsername ?? ""} disabled />
-  </label>
-
-  <label class="fieldInput">
-    <span>Bio</span>
-    <textarea
-      bind:value={bio}
-      rows="4"
-      maxlength="280"
-      placeholder="Erzähl was über dich…"
-    ></textarea>
-    <small class="counter">{bio.length} / 280</small>
-  </label>
-
-  <button class="save" on:click={save}>Speichern</button>
-  {#if saved}
-    <p class="messageSaved">✓ Gespeichert</p>
+    </section>
   {/if}
-
-  
 </main>
 
-
-
-
 <style>
-  .profilePage {
-    max-width: 480px;
-    margin: 2rem auto;
-    padding: 1.5rem;
+  .profile-page {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
     color: #eee;
-    font-family: Arial, sans-serif;
-  }
-  .back {
-    color: #ff8c32;
-    text-decoration: none;
-    font-size: 0.9rem;
-  }
-  .back:hover {
-    text-decoration: underline;
-  }
-  h1 {
-    margin: 1rem 0 1.5rem;
   }
 
-  .profilePicture {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-  }
-  .avatar {
-    width: 128px;
-    height: 128px;
-    border-radius: 50%;
-    object-fit: cover;
-    background: #333;
-  }
-  .avatar-placeholder {
+  .profile-header {
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-size: 3rem;
-    color: #888;
-    background: #2a2a2a;
+    gap: 1rem;
+    margin-bottom: 2rem;
   }
-  .profilePictureButtons {
-    display: flex;
-    gap: 0.5rem;
+  .profile-header h1 {
+    margin: 0;
+    font-size: 1.6rem;
   }
 
-  .fieldInput {
-    display: block;
-    margin-bottom: 1rem;
-  }
-  .fieldInput span {
-    display: block;
-    font-size: 0.85rem;
-    color: #aaa;
-    margin-bottom: 0.3rem;
-  }
-  .fieldInput input,
-  .fieldInput textarea {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 0.6rem;
+  .back-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #ccc;
+    padding: 0.4rem 0.8rem;
     border-radius: 6px;
-    border: 1px solid #444;
-    background: #1e1e1e;
-    color: #eee;
-    font-size: 1rem;
-    font-family: inherit;
-    resize: vertical;
-  }
-  .fieldInput input:disabled {
-    opacity: 0.6;
-  }
-  .counter {
-    display: block;
-    text-align: right;
-    color: #777;
-    font-size: 0.75rem;
-    margin-top: 0.2rem;
-  }
-
-  button {
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    border: none;
-    background: #ff8c32;
-    color: white;
     cursor: pointer;
     font-size: 0.9rem;
+    transition: background 0.15s, color 0.15s;
   }
-  button:hover {
-    background: #e87a20;
-  }
-  button.secondary {
-    background: transparent;
-    border: 1px solid #555;
-    color: #ccc;
-  }
-  button.secondary:hover {
-    background: #2a2a2a;
+  .back-btn:hover {
+    background: rgba(255, 140, 50, 0.12);
+    color: #ff8c32;
   }
 
-  .save {
-    width: 100%;
-    padding: 0.75rem;
-    font-size: 1rem;
-    margin-top: 0.5rem;
+  .card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
   }
-  .messageSaved {
-    text-align: center;
-    color: #6ad06a;
+  .card h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.05rem;
+    color: #ff8c32;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .info {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 0.5rem 1rem;
+    margin: 0;
+  }
+  .info dt {
+    color: #888;
+    font-size: 0.9rem;
+  }
+  .info dd {
+    margin: 0;
+    color: #eee;
+  }
+  .mono {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.85rem;
+    color: #bbb;
+    word-break: break-all;
+  }
+
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .form label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.9rem;
+    color: #aaa;
+  }
+  .form input {
+    padding: 0.5rem 0.7rem;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.3);
+    color: #eee;
+    font-size: 0.95rem;
+  }
+  .form input:focus {
+    outline: none;
+    border-color: #ff8c32;
+  }
+
+  .primary {
     margin-top: 0.5rem;
+    padding: 0.6rem 1rem;
+    background: #ff8c32;
+    border: none;
+    border-radius: 6px;
+    color: #1a1a1a;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .primary:hover {
+    opacity: 0.9;
+  }
+  .primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .form-message {
+    margin: 0.5rem 0 0;
+    font-size: 0.9rem;
+  }
+  .form-message.ok {
+    color: #6fcf6f;
+  }
+  .form-message.error {
+    color: #ff8888;
+  }
+
+  .status {
+    color: #888;
+    font-size: 0.95rem;
+  }
+  .status.error {
+    color: #ff8888;
   }
 </style>

@@ -11,7 +11,6 @@
   let myUserId = null;
   let isAdmin = false;
   let isMod = false;
-  let myUserName = localStorage.getItem("username");
 
   let dms = [];
   let textChannels = [];
@@ -30,8 +29,7 @@
   $: dmsLabeled = dms.map((ch) => {
     let label = "??";
     if (ch.dm_user_low === myUserId) label = ch.dm_user_high_username ?? "??";
-    else if (ch.dm_user_high === myUserId)
-      label = ch.dm_user_low_username ?? "??";
+    else if (ch.dm_user_high === myUserId) label = ch.dm_user_low_username ?? "??";
     return { ...ch, _label: label };
   });
 
@@ -71,6 +69,16 @@
 
   function decodeContent(bytes) {
     return new TextDecoder().decode(new Uint8Array(bytes));
+  }
+
+  // Returns either { kind: "image", dataUrl } or { kind: "text", text }.
+  // IMG: prefix means the rest is base64 JPEG.
+  function parseContent(bytes) {
+    const decoded = decodeContent(bytes);
+    if (decoded.startsWith("IMG:")) {
+      return { kind: "image", dataUrl: "data:image/jpeg;base64," + decoded.slice(4) };
+    }
+    return { kind: "text", text: decoded };
   }
 
   function appendMessage(msg) {
@@ -122,10 +130,7 @@
   }
 
   function shortTime(iso) {
-    return new Date(iso).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
   function openChannel(channel_id) {
@@ -139,52 +144,75 @@
     });
   }
 
-  function handleSend() {
+  async function handleSend() {
+    if (!currentChannelId) return;
     const text = messageText.trim();
-    if (!text || !currentChannelId) return;
-    const content = Array.from(new TextEncoder().encode(text));
+    const queuedFiles = files;
+    if (!text && queuedFiles.length === 0) return;
+
+    // Clear input state immediately so the user can keep typing while images upload.
     messageText = "";
-    channelSock.emit(
-      "channel_send",
-      { channel_id: currentChannelId, content },
-      (res) => {
+    files = [];
+    previews.forEach((p) => URL.revokeObjectURL(p.url));
+    previews = [];
+
+    // Send each image as its own message, then the text if any.
+    for (const file of queuedFiles) {
+      try {
+        const b64 = await downscaleImageToBase64(file);
+        const payload = "IMG:" + b64;
+        const content = Array.from(new TextEncoder().encode(payload));
+        await new Promise((resolve) => {
+          channelSock.emit(
+            "channel_send",
+            { channel_id: currentChannelId, content },
+            (res) => {
+              if (res.status !== "ok") {
+                console.error(res.reason);
+                alert(`image send failed: ${res.reason}`);
+              } else {
+                appendMessage(res.message);
+              }
+              resolve();
+            }
+          );
+        });
+      } catch (e) {
+        console.error("image processing failed:", e);
+        alert(`image send failed: ${e.message}`);
+      }
+    }
+
+    if (text) {
+      const content = Array.from(new TextEncoder().encode(text));
+      channelSock.emit("channel_send", { channel_id: currentChannelId, content }, (res) => {
         if (res.status !== "ok") return console.error(res.reason);
         appendMessage(res.message);
-      },
-    );
+      });
+    }
   }
 
   function newDm() {
     const username = window.prompt("Username to DM:");
     if (!username) return;
     channelSock.emit("lookup_user", { username: username.trim() }, (lookup) => {
-      if (lookup.status !== "ok")
-        return alert(`user not found: ${lookup.reason}`);
-      channelSock.emit(
-        "channel_create",
-        { kind: "dm", other: lookup.user_id },
-        (res) => {
-          if (res.status !== "ok")
-            return alert(`create DM failed: ${res.reason}`);
-          addChannel(res.channel);
-          openChannel(res.channel.channel_id);
-        },
-      );
+      if (lookup.status !== "ok") return alert(`user not found: ${lookup.reason}`);
+      channelSock.emit("channel_create", { kind: "dm", other: lookup.user_id }, (res) => {
+        if (res.status !== "ok") return alert(`create DM failed: ${res.reason}`);
+        addChannel(res.channel);
+        openChannel(res.channel.channel_id);
+      });
     });
   }
 
   function newTextChannel() {
     const name = window.prompt("Channel name:");
     if (!name) return;
-    channelSock.emit(
-      "channel_create",
-      { kind: "text", name: name.trim() },
-      (res) => {
-        if (res.status !== "ok") return alert(`create failed: ${res.reason}`);
-        addChannel(res.channel);
-        openChannel(res.channel.channel_id);
-      },
-    );
+    channelSock.emit("channel_create", { kind: "text", name: name.trim() }, (res) => {
+      if (res.status !== "ok") return alert(`create failed: ${res.reason}`);
+      addChannel(res.channel);
+      openChannel(res.channel.channel_id);
+    });
   }
 
   function logout() {
@@ -205,32 +233,78 @@
     goto("/login");
   }
 
-  function openLightbox(p) {
-    lightbox = p;
-  }
-  function closeLightbox() {
-    lightbox = null;
-  }
-  function toggleAttachmentMenu() {
-    openAttachment = !openAttachment;
-  }
-  function closeAttachmentMenu() {
-    openAttachment = false;
-  }
+  function openLightbox(p) { lightbox = p; }
+  function closeLightbox() { lightbox = null; }
+  function toggleAttachmentMenu() { openAttachment = !openAttachment; }
+  function closeAttachmentMenu() { openAttachment = false; }
   function openFilePicker(accept) {
     closeAttachmentMenu();
     fileInput.accept = accept;
     fileInput.click();
   }
   function handleFileChange(event) {
+    const MAX_BYTES = 5 * 1024 * 1024;
     const selected = Array.from(event.target.files);
-    selected.forEach((file) => {
+    for (const file of selected) {
+      if (!file.type.startsWith("image/")) {
+        alert(`${file.name}: only images are supported`);
+        continue;
+      }
+      if (file.size > MAX_BYTES) {
+        alert(`${file.name}: image too large (max 5 MB)`);
+        continue;
+      }
       const url = URL.createObjectURL(file);
-      previews = [
-        ...previews,
-        { name: file.name, size: file.size, type: file.type, url },
-      ];
+      previews = [...previews, { name: file.name, size: file.size, type: file.type, url }];
       files = [...files, file];
+    }
+    event.target.value = ""; // allow picking the same file again
+  }
+
+  // Downscale a File/Blob to JPEG, max 800px on the long edge, quality 0.85.
+  // Returns a base64 string (no data: prefix).
+  async function downscaleImageToBase64(file) {
+    const MAX_DIM = 800;
+    const QUALITY = 0.85;
+
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("failed to decode image"));
+      el.src = URL.createObjectURL(file);
+    });
+
+    let { width, height } = img;
+    if (width > MAX_DIM || height > MAX_DIM) {
+      if (width >= height) {
+        height = Math.round((height * MAX_DIM) / width);
+        width = MAX_DIM;
+      } else {
+        width = Math.round((width * MAX_DIM) / height);
+        height = MAX_DIM;
+      }
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, width, height);
+
+    const blob = await new Promise((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", QUALITY)
+    );
+    URL.revokeObjectURL(img.src);
+
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        // reader.result is "data:image/jpeg;base64,<...>"
+        const comma = reader.result.indexOf(",");
+        resolve(reader.result.slice(comma + 1));
+      };
+      reader.onerror = () => reject(new Error("base64 encode failed"));
+      reader.readAsDataURL(blob);
     });
   }
   function removePreview(index) {
@@ -251,30 +325,17 @@
   }
   function handleClick(event) {
     const target = event.target;
-    if (
-      openAttachment &&
-      attachmentMenu &&
-      target instanceof Node &&
-      !attachmentMenu.contains(target)
-    ) {
+    if (openAttachment && attachmentMenu && target instanceof Node && !attachmentMenu.contains(target)) {
       closeAttachmentMenu();
     }
   }
 
   onMount(() => {
     const saved = localStorage.getItem("session");
-    if (!saved) {
-      goto("/login");
-      return;
-    }
+    if (!saved) { goto("/login"); return; }
     let cookie;
-    try {
-      cookie = JSON.parse(saved);
-    } catch {
-      localStorage.removeItem("session");
-      goto("/login");
-      return;
-    }
+    try { cookie = JSON.parse(saved); }
+    catch { localStorage.removeItem("session"); goto("/login"); return; }
 
     channelSock = io("http://localhost:3000/channel", { auth: cookie });
     adminSock = io("http://localhost:3000/admin", { auth: cookie });
@@ -299,9 +360,7 @@
       connectionState = "reconnecting";
     });
 
-    adminSock.on("connect_error", (e) =>
-      console.error("admin connect failed:", e.message),
-    );
+    adminSock.on("connect_error", (e) => console.error("admin connect failed:", e.message));
 
     channelSock.on("connect", () => {
       connectionState = "connected";
@@ -342,13 +401,7 @@
   });
 </script>
 
-<input
-  bind:this={fileInput}
-  type="file"
-  multiple
-  hidden
-  on:change={handleFileChange}
-/>
+<input bind:this={fileInput} type="file" multiple hidden on:change={handleFileChange} />
 
 <main class="site-main chat-page">
   {#if connectionState === "reconnecting"}
@@ -359,11 +412,7 @@
       <div class="sidebar-header">
         <h2>Text</h2>
         {#if isAdmin}
-          <button
-            class="add-btn"
-            on:click={newTextChannel}
-            title="New text channel">+</button
-          >
+          <button class="add-btn" on:click={newTextChannel} title="New text channel">+</button>
         {/if}
       </div>
       {#each textChannels as ch (ch.channel_id)}
@@ -382,7 +431,6 @@
         <h2>Freunde</h2>
         <button class="add-btn" on:click={newDm} title="New DM">+</button>
       </div>
-
       {#each dmsLabeled as ch (ch.channel_id)}
         <button
           class="dm-item"
@@ -395,10 +443,8 @@
         </button>
       {/each}
 
+      <button class="logout-btn" on:click={() => goto("/profile")}>Profile</button>
       <button class="logout-btn" on:click={logout}>Log out</button>
-      <div>
-          <a href="/profile"><h2 class="profile">{myUserName}</h2></a>
-      </div>
     </aside>
 
     <section class="chat-history">
@@ -408,22 +454,31 @@
           <div class="empty-state">
             <p class="empty-state-title">No chat selected</p>
             <p class="empty-state-hint">
-              Pick a conversation from the sidebar, or click + to start a new
-              one.
+              Pick a conversation from the sidebar, or click + to start a new one.
             </p>
           </div>
         {:else}
           {#each messages as msg (msg.message_id)}
-            <div class="message" class:mine={msg.author_id === myUserId}>
-              <div class="message-meta">
-                <span class="message-author">
-                  {msg.author_id === myUserId ? "Me" : msg.author_username}
-                </span>
-                <span class="message-time">{shortTime(msg.created_at)}</span>
-              </div>
-              <div class="message-body">{decodeContent(msg.content)}</div>
+          {@const parsed = parseContent(msg.content)}
+          <div class="message" class:mine={msg.author_id === myUserId}>
+            <div class="message-meta">
+              <span class="message-author">
+                {msg.author_id === myUserId ? "Me" : msg.author_username}
+              </span>
+              <span class="message-time">{shortTime(msg.created_at)}</span>
             </div>
-          {/each}
+            {#if parsed.kind === "image"}
+              <img
+                class="message-image"
+                src={parsed.dataUrl}
+                alt="attachment"
+                on:click={() => openLightbox({ url: parsed.dataUrl, name: "attachment" })}
+              />
+            {:else}
+              <div class="message-body">{parsed.text}</div>
+            {/if}
+          </div>
+        {/each}
         {/if}
       </div>
     </section>
@@ -437,14 +492,8 @@
         >
           {#if preview.type.startsWith("image/")}
             <div class="preview-thumb">
-              <img
-                src={preview.url}
-                alt={preview.name}
-                on:click={() => openLightbox(preview)}
-              />
-              <button class="remove-btn" on:click={() => removePreview(i)}
-                >✕</button
-              >
+              <img src={preview.url} alt={preview.name} on:click={() => openLightbox(preview)} />
+              <button class="remove-btn" on:click={() => removePreview(i)}>✕</button>
             </div>
           {:else}
             <div class="file-chip">
@@ -453,9 +502,7 @@
                 <span class="file-chip-name">{preview.name}</span>
                 <span class="file-chip-size">{formatSize(preview.size)}</span>
               </span>
-              <button class="file-chip-remove" on:click={() => removePreview(i)}
-                >✕</button
-              >
+              <button class="file-chip-remove" on:click={() => removePreview(i)}>✕</button>
             </div>
           {/if}
         </div>
@@ -466,14 +513,10 @@
       <input
         class="chat-input-field"
         type="text"
-        placeholder={currentChannelId
-          ? "Type your message..."
-          : "Select a chat first"}
+        placeholder={currentChannelId ? "Type your message..." : "Select a chat first"}
         id="message-input"
         bind:value={messageText}
-        on:keydown={(e) => {
-          if (e.key === "Enter") handleSend();
-        }}
+        on:keydown={(e) => { if (e.key === "Enter") handleSend(); }}
         disabled={!currentChannelId}
       />
     </div>
@@ -488,42 +531,32 @@
       </button>
       <div class="attachment-menu-wrapper" bind:this={attachmentMenu}>
         {#if openAttachment}
-          <div
-            class="attachment-panel"
-            transition:fly={{ y: 20, duration: 350 }}
-          >
-            <button
-              class="attachment-option"
-              on:click={() => openFilePicker("*")}>File</button
-            >
+          <div class="attachment-panel" transition:fly={{ y: 20, duration: 350 }}>
+            <button class="attachment-option" on:click={() => openFilePicker("image/*")}>Image</button>
           </div>
         {/if}
-        <button
-          class="button-chat"
-          on:click|stopPropagation={toggleAttachmentMenu}>+</button
-        >
+        <button class="button-chat" on:click|stopPropagation={toggleAttachmentMenu}>+</button>
       </div>
     </div>
   </div>
 
   {#if lightbox}
-    <div
-      class="lightbox-overlay"
-      on:click={closeLightbox}
-      transition:fly={{ duration: 150 }}
-    >
-      <img
-        class="lightbox-img"
-        src={lightbox.url}
-        alt={lightbox.name}
-        on:click|stopPropagation
-      />
+    <div class="lightbox-overlay" on:click={closeLightbox} transition:fly={{ duration: 150 }}>
+      <img class="lightbox-img" src={lightbox.url} alt={lightbox.name} on:click|stopPropagation />
       <button class="lightbox-close" on:click={closeLightbox}>✕</button>
     </div>
   {/if}
 </main>
 
 <style>
+  .message-image {
+    max-width: 360px;
+    max-height: 360px;
+    border-radius: 6px;
+    cursor: zoom-in;
+    display: block;
+    margin-top: 0.3rem;
+  }
   /* ─── Sidebar — section headers and add buttons (new elements) ─── */
   .sidebar-header {
     display: flex;
@@ -550,9 +583,7 @@
     line-height: 1;
     padding: 0.15rem 0.4rem;
     border-radius: 4px;
-    transition:
-      background 0.15s,
-      color 0.15s;
+    transition: background 0.15s, color 0.15s;
   }
   .add-btn:hover {
     background: rgba(255, 140, 50, 0.15);
@@ -584,10 +615,7 @@
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.85rem;
-    transition:
-      background 0.15s,
-      color 0.15s,
-      border-color 0.15s;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
   .logout-btn:hover {
     background: rgba(255, 80, 80, 0.1);
@@ -689,12 +717,8 @@
     animation: spin 1.5s linear infinite;
   }
   @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   /* ─── Disabled states (visual hint only, no layout change) ─── */
@@ -703,9 +727,4 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
-
-  .profile {
-    margin-top: 500px;
-  }
-
 </style>
