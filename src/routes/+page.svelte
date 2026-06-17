@@ -20,7 +20,7 @@
 <main class="container">
   <section class="hero">
     <div class="title-group">
-      <img src="src//img/bonfire_icon_4k.png" alt="Bonfire logo" class="logo" />
+      <img src="src//img/bonfire_logo.png" alt="Bonfire logo" class="logo" />
       <h1 id="titletext">Bonfire</h1>
     </div>
 

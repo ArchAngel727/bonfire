@@ -21,7 +21,7 @@
   <header class="site-header">
     <div class="header-inner">
       <div id="logoandtitle">
-      <img id="logo-header" src="src//img/bonfire_icon_4k.png" alt="Bonfire logo" class="logo" />
+      <img id="logo-header" src="src//img/bonfire_logo.png" alt="Bonfire logo" class="logo" />
       <a href="/" class="brand">Bonfire</a>
       </div>
       <nav class="main-nav">
