@@ -114,6 +114,53 @@
     }
   }
 
+  function removeChannel(channel_id) {
+    textChannels = textChannels.filter((c) => c.channel_id !== channel_id);
+    dms = dms.filter((c) => c.channel_id !== channel_id);
+    messagesByChannel.delete(channel_id);
+    messagesByChannel = messagesByChannel;
+    clearUnread(channel_id);
+    if (currentChannelId === channel_id) currentChannelId = null;
+  }
+
+  function removeMessage(channel_id, message_id) {
+    const list = messagesByChannel.get(channel_id);
+    if (!list) return;
+    const filtered = list.filter((m) => m.message_id !== message_id);
+    if (filtered.length === list.length) return; // not present
+    messagesByChannel.set(channel_id, filtered);
+    messagesByChannel = messagesByChannel;
+  }
+
+  // Admin-only: delete a text channel after confirm.
+  function deleteChannel(ch) {
+    if (!confirm(`Delete #${ch.name}? This removes all its messages.`)) return;
+    channelSock.emit("channel_delete", { channel_id: ch.channel_id }, (res) => {
+      if (res.status !== "ok") return alert(`delete failed: ${res.reason}`);
+      removeChannel(ch.channel_id); // server broadcasts to others; remove locally too
+    });
+  }
+
+  // Can the current user delete this message?
+  function canDeleteMessage(msg) {
+    if (msg.author_id === myUserId) return true;
+    // Text channels: admin/mod can delete anyone's. DMs: only the author.
+    const isTextChannel = textChannels.some((c) => c.channel_id === msg.channel_id);
+    return isTextChannel && (isAdmin || isMod);
+  }
+
+  function deleteMessage(msg) {
+    if (!confirm("Delete this message?")) return;
+    channelSock.emit(
+      "channel_delete_message",
+      { channel_id: msg.channel_id, message_id: msg.message_id },
+      (res) => {
+        if (res.status !== "ok") return alert(`delete failed: ${res.reason}`);
+        removeMessage(msg.channel_id, msg.message_id);
+      }
+    );
+  }
+
   function dmLabel(ch) {
     if (ch.dm_user_low === myUserId) return ch.dm_user_high_username ?? "??";
     if (ch.dm_user_high === myUserId) return ch.dm_user_low_username ?? "??";
@@ -391,6 +438,14 @@
       addChannel(ch);
     });
 
+    channelSock.on("channel_deleted", ({ channel_id }) => {
+      removeChannel(channel_id);
+    });
+
+    channelSock.on("channel_message_deleted", ({ channel_id, message_id }) => {
+      removeMessage(channel_id, message_id);
+    });
+
     document.addEventListener("click", handleClick);
 
     return () => {
@@ -416,15 +471,24 @@
         {/if}
       </div>
       {#each textChannels as ch (ch.channel_id)}
-        <button
-          class="dm-item"
-          class:active={currentChannelId === ch.channel_id}
-          class:has-unread={unread.has(ch.channel_id)}
-          on:click={() => openChannel(ch.channel_id)}
-        >
-          #{ch.name}
-          {#if unread.has(ch.channel_id)}<span class="unread-dot">●</span>{/if}
-        </button>
+        <div class="channel-row">
+          <button
+            class="dm-item"
+            class:active={currentChannelId === ch.channel_id}
+            class:has-unread={unread.has(ch.channel_id)}
+            on:click={() => openChannel(ch.channel_id)}
+          >
+            #{ch.name}
+            {#if unread.has(ch.channel_id)}<span class="unread-dot">●</span>{/if}
+          </button>
+          {#if isAdmin}
+            <button
+              class="channel-delete-btn"
+              title="Delete channel"
+              on:click|stopPropagation={() => deleteChannel(ch)}
+            >×</button>
+          {/if}
+        </div>
       {/each}
 
       <div class="sidebar-header">
@@ -466,6 +530,13 @@
                 {msg.author_id === myUserId ? "Me" : msg.author_username}
               </span>
               <span class="message-time">{shortTime(msg.created_at)}</span>
+              {#if canDeleteMessage(msg)}
+                <button
+                  class="message-delete-btn"
+                  title="Delete message"
+                  on:click={() => deleteMessage(msg)}
+                >×</button>
+              {/if}
             </div>
             {#if parsed.kind === "image"}
               <img
@@ -525,7 +596,7 @@
       <button
         class="button-chat"
         on:click={handleSend}
-        disabled={!currentChannelId || !messageText.trim()}
+        disabled={!currentChannelId || (!messageText.trim() && files.length === 0)}
       >
         Send
       </button>
@@ -549,6 +620,51 @@
 </main>
 
 <style>
+  /* Channel row contains the channel button + an optional admin delete button. */
+  .channel-row {
+    display: flex;
+    align-items: center;
+  }
+  .channel-row .dm-item {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .channel-delete-btn {
+    background: transparent;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0 0.5rem;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+  }
+  .channel-row:hover .channel-delete-btn {
+    opacity: 1;
+  }
+  .channel-delete-btn:hover {
+    color: #ff8888;
+  }
+
+  .message-delete-btn {
+    background: transparent;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+    padding: 0 0.3rem;
+    margin-left: 0.4rem;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+  }
+  .message:hover .message-delete-btn {
+    opacity: 1;
+  }
+  .message-delete-btn:hover {
+    color: #ff8888;
+  }
+
   .message-image {
     max-width: 360px;
     max-height: 360px;
