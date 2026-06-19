@@ -141,6 +141,27 @@
     });
   }
 
+  function renameChannel(ch) {
+    const next = window.prompt(`Rename #${ch.name} to:`, ch.name);
+    if (!next) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === ch.name) return;
+    channelSock.emit(
+      "channel_rename",
+      { channel_id: ch.channel_id, name: trimmed },
+      (res) => {
+        if (res.status !== "ok") return alert(`rename failed: ${res.reason}`);
+        applyRename(res.channel ?? { channel_id: ch.channel_id, name: trimmed });
+      }
+    );
+  }
+
+  function applyRename(updated) {
+    textChannels = textChannels.map((c) =>
+      c.channel_id === updated.channel_id ? { ...c, name: updated.name } : c
+    );
+  }
+
   // Can the current user delete this message?
   function canDeleteMessage(msg) {
     if (msg.author_id === myUserId) return true;
@@ -157,6 +178,30 @@
       (res) => {
         if (res.status !== "ok") return alert(`delete failed: ${res.reason}`);
         removeMessage(msg.channel_id, msg.message_id);
+      }
+    );
+  }
+
+  // Can the current user ban this message's author? Admin and mod can ban
+  // (in text channels only — DMs are private and not a moderation surface).
+  function canBan(msg) {
+    if (msg.author_id === myUserId) return false;
+    if (!isAdmin && !isMod) return false;
+    return textChannels.some((c) => c.channel_id === msg.channel_id);
+  }
+
+  function banUser(msg) {
+    const reason = window.prompt(
+      `Ban ${msg.author_username}? Optionally enter a reason:`,
+      ""
+    );
+    if (reason === null) return; // cancel
+    adminSock.emit(
+      "ban_user",
+      { user_id: msg.author_id, reason: reason || null },
+      (res) => {
+        if (res.status !== "ok") return alert(`ban failed: ${res.reason}`);
+        alert(`${msg.author_username} has been banned.`);
       }
     );
   }
@@ -442,6 +487,10 @@
       removeChannel(channel_id);
     });
 
+    channelSock.on("channel_renamed", (ch) => {
+      applyRename(ch);
+    });
+
     channelSock.on("channel_message_deleted", ({ channel_id, message_id }) => {
       removeMessage(channel_id, message_id);
     });
@@ -482,6 +531,11 @@
             {#if unread.has(ch.channel_id)}<span class="unread-dot">●</span>{/if}
           </button>
           {#if isAdmin}
+            <button
+              class="channel-edit-btn"
+              title="Rename channel"
+              on:click|stopPropagation={() => renameChannel(ch)}
+            >✎</button>
             <button
               class="channel-delete-btn"
               title="Delete channel"
@@ -536,6 +590,13 @@
                   title="Delete message"
                   on:click={() => deleteMessage(msg)}
                 >×</button>
+              {/if}
+              {#if canBan(msg)}
+                <button
+                  class="message-ban-btn"
+                  title="Ban user"
+                  on:click={() => banUser(msg)}
+                >⊘</button>
               {/if}
             </div>
             {#if parsed.kind === "image"}
@@ -646,6 +707,23 @@
     color: #ff8888;
   }
 
+  .channel-edit-btn {
+    background: transparent;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0 0.3rem;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+  }
+  .channel-row:hover .channel-edit-btn {
+    opacity: 1;
+  }
+  .channel-edit-btn:hover {
+    color: #ff8c32;
+  }
+
   .message-delete-btn {
     background: transparent;
     border: none;
@@ -663,6 +741,25 @@
   }
   .message-delete-btn:hover {
     color: #ff8888;
+  }
+
+  .message-ban-btn {
+    background: transparent;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+    padding: 0 0.3rem;
+    margin-left: 0.2rem;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+  }
+  .message:hover .message-ban-btn {
+    opacity: 1;
+  }
+  .message-ban-btn:hover {
+    color: #ff6666;
   }
 
   .message-image {

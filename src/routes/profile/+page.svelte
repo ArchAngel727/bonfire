@@ -70,10 +70,20 @@
           pwMessage = { kind: "error", text: res.reason ?? "change failed" };
           return;
         }
-        pwMessage = { kind: "ok", text: "password updated" };
+        pwMessage = {
+          kind: "ok",
+          text: "password updated — logging you out for security",
+        };
         oldPassword = "";
         newPassword = "";
         confirmPassword = "";
+        // Backend killed all sessions for this user. Clear our cookie and
+        // bounce to login after a beat so the message is readable.
+        setTimeout(() => {
+          localStorage.removeItem("session");
+          adminSock?.disconnect();
+          goto("/login");
+        }, 1500);
       }
     );
   }
