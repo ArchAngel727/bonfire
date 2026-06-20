@@ -4,9 +4,36 @@
   import { flip } from "svelte/animate";
   import { io } from "socket.io-client";
   import { goto } from "$app/navigation";
+  import {
+    initCrypto,
+    sendDM,
+    decryptIncomingDM,
+    peerOf,
+    cachePlaintext,
+    getPlaintext,
+  } from "$lib/cryptoService";
+  import { detachCrypto } from "$lib/crypto";
 
   let channelSock;
   let adminSock;
+  let keysSock;
+
+  // initCrypto needs BOTH the user_id (from my_role) and the keys socket
+  // connected. Each side calls maybeInitCrypto when its prerequisite lands.
+  let cryptoReady = false;
+  async function maybeInitCrypto() {
+    if (cryptoReady) return;
+    if (!myUserId) return;
+    if (!keysSock || !keysSock.connected) return;
+    cryptoReady = true;
+    try {
+      await initCrypto(keysSock, myUserId);
+    } catch (e) {
+      console.error("crypto init failed:", e);
+      cryptoReady = false;
+      alert(`crypto init failed: ${e.message ?? e}`);
+    }
+  }
 
   let myUserId = null;
   let isAdmin = false;
@@ -79,6 +106,25 @@
       return { kind: "image", dataUrl: "data:image/jpeg;base64," + decoded.slice(4) };
     }
     return { kind: "text", text: decoded };
+  }
+
+  // ─── DM helpers ─────────────────────────────────────────────────────
+
+  function isDMChannel(channel_id) {
+    return dms.some((c) => c.channel_id === channel_id);
+  }
+
+  function getDMPeer(channel_id) {
+    const ch = dms.find((c) => c.channel_id === channel_id);
+    if (!ch) return null;
+    return peerOf(ch, myUserId);
+  }
+
+  // Wrap arbitrary text in a ChannelMessage's `content` (number[]) field —
+  // used when we've decrypted a DM and want it to flow through the same
+  // parseContent path as plaintext text-channel messages.
+  function encodeText(text) {
+    return Array.from(new TextEncoder().encode(text));
   }
 
   function appendMessage(msg) {
@@ -225,14 +271,53 @@
     return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
-  function openChannel(channel_id) {
+  async function openChannel(channel_id) {
     currentChannelId = channel_id;
     clearUnread(channel_id);
     stickToBottom = true;
-    channelSock.emit("channel_sync", { channel_id }, (res) => {
+    const isDM = isDMChannel(channel_id);
+
+    channelSock.emit("channel_sync", { channel_id }, async (res) => {
       if (res.status !== "ok") return console.error(res.reason);
       if (currentChannelId !== channel_id) return;
-      setMessages(channel_id, res.messages);
+
+      if (!isDM) {
+        setMessages(channel_id, res.messages);
+        return;
+      }
+
+      // DM history: check the plaintext cache first for every message
+      // (own messages can't be decrypted because Olm is forward-secret;
+      // incoming messages can't be decrypted twice because the Olm ratchet
+      // advances on every decrypt). Only fall through to crypto_decrypt
+      // for messages we've never successfully decrypted on this install.
+      const decrypted = [];
+      for (const msg of res.messages) {
+        const cached = getPlaintext(myUserId, msg.message_id);
+        if (cached !== null) {
+          decrypted.push({ ...msg, content: encodeText(cached) });
+          continue;
+        }
+        if (msg.author_id === myUserId) {
+          decrypted.push({
+            ...msg,
+            content: encodeText("[sent from another device]"),
+          });
+          continue;
+        }
+        try {
+          const plaintext = await decryptIncomingDM(keysSock, myUserId, msg);
+          if (plaintext === null) continue;
+          cachePlaintext(myUserId, msg.message_id, plaintext);
+          decrypted.push({ ...msg, content: encodeText(plaintext) });
+        } catch (e) {
+          console.error(`decrypt ${msg.message_id} failed:`, e);
+          decrypted.push({ ...msg, content: encodeText("[decryption failed]") });
+        }
+      }
+      // If the user has navigated away while we were decrypting, drop.
+      if (currentChannelId !== channel_id) return;
+      setMessages(channel_id, decrypted);
     });
   }
 
@@ -248,27 +333,55 @@
     previews.forEach((p) => URL.revokeObjectURL(p.url));
     previews = [];
 
+    const isDM = isDMChannel(currentChannelId);
+    const peerId = isDM ? getDMPeer(currentChannelId) : null;
+    if (isDM && !peerId) {
+      console.error("DM channel without resolvable peer");
+      alert("could not resolve DM peer");
+      return;
+    }
+
     // Send each image as its own message, then the text if any.
     for (const file of queuedFiles) {
       try {
         const b64 = await downscaleImageToBase64(file);
         const payload = "IMG:" + b64;
-        const content = Array.from(new TextEncoder().encode(payload));
-        await new Promise((resolve) => {
-          channelSock.emit(
-            "channel_send",
-            { channel_id: currentChannelId, content },
-            (res) => {
-              if (res.status !== "ok") {
-                console.error(res.reason);
-                alert(`image send failed: ${res.reason}`);
-              } else {
-                appendMessage(res.message);
+
+        if (isDM) {
+          try {
+            const message = await sendDM(
+              channelSock,
+              keysSock,
+              currentChannelId,
+              peerId,
+              payload
+            );
+            cachePlaintext(myUserId, message.message_id, payload);
+            // Server stores/broadcasts the ciphertext; we render the local
+            // plaintext by swapping content before appending.
+            appendMessage({ ...message, content: encodeText(payload) });
+          } catch (e) {
+            console.error("DM image send failed:", e);
+            alert(`image send failed: ${e.message}`);
+          }
+        } else {
+          const content = Array.from(new TextEncoder().encode(payload));
+          await new Promise((resolve) => {
+            channelSock.emit(
+              "channel_send",
+              { channel_id: currentChannelId, content },
+              (res) => {
+                if (res.status !== "ok") {
+                  console.error(res.reason);
+                  alert(`image send failed: ${res.reason}`);
+                } else {
+                  appendMessage(res.message);
+                }
+                resolve();
               }
-              resolve();
-            }
-          );
-        });
+            );
+          });
+        }
       } catch (e) {
         console.error("image processing failed:", e);
         alert(`image send failed: ${e.message}`);
@@ -276,11 +389,28 @@
     }
 
     if (text) {
-      const content = Array.from(new TextEncoder().encode(text));
-      channelSock.emit("channel_send", { channel_id: currentChannelId, content }, (res) => {
-        if (res.status !== "ok") return console.error(res.reason);
-        appendMessage(res.message);
-      });
+      if (isDM) {
+        try {
+          const message = await sendDM(
+            channelSock,
+            keysSock,
+            currentChannelId,
+            peerId,
+            text
+          );
+          cachePlaintext(myUserId, message.message_id, text);
+          appendMessage({ ...message, content: encodeText(text) });
+        } catch (e) {
+          console.error("DM send failed:", e);
+          alert(`send failed: ${e.message}`);
+        }
+      } else {
+        const content = Array.from(new TextEncoder().encode(text));
+        channelSock.emit("channel_send", { channel_id: currentChannelId, content }, (res) => {
+          if (res.status !== "ok") return console.error(res.reason);
+          appendMessage(res.message);
+        });
+      }
     }
   }
 
@@ -307,12 +437,21 @@
     });
   }
 
-  function logout() {
+  async function logout() {
+    cryptoReady = false;
+    try {
+      await detachCrypto();
+    } catch (e) {
+      console.error("crypto detach failed:", e);
+      // proceed with logout anyway
+    }
     localStorage.removeItem("session");
     channelSock?.disconnect();
     adminSock?.disconnect();
+    keysSock?.disconnect();
     channelSock = null;
     adminSock = null;
+    keysSock = null;
     myUserId = null;
     isAdmin = false;
     isMod = false;
@@ -431,6 +570,7 @@
 
     channelSock = io("http://localhost:3000/channel", { auth: cookie });
     adminSock = io("http://localhost:3000/admin", { auth: cookie });
+    keysSock = io("http://localhost:3000/keys", { auth: cookie });
 
     channelSock.on("connect_error", (e) => {
       const msg = e.message ?? "";
@@ -453,6 +593,7 @@
     });
 
     adminSock.on("connect_error", (e) => console.error("admin connect failed:", e.message));
+    keysSock.on("connect_error", (e) => console.error("keys connect failed:", e.message));
 
     channelSock.on("connect", () => {
       connectionState = "connected";
@@ -464,16 +605,34 @@
     });
 
     adminSock.on("connect", () => {
-      adminSock.emit("my_role", {}, (res) => {
+      adminSock.emit("my_role", {}, async (res) => {
         if (res.status !== "ok") return console.error(res.reason);
         myUserId = res.user_id;
         isAdmin = res.is_admin;
         isMod = res.is_mod;
+        await maybeInitCrypto();
       });
     });
 
-    channelSock.on("channel_message", (msg) => {
-      appendMessage(msg);
+    keysSock.on("connect", async () => {
+      await maybeInitCrypto();
+    });
+
+    channelSock.on("channel_message", async (msg) => {
+      const isDM = isDMChannel(msg.channel_id);
+      if (isDM) {
+        try {
+          const plaintext = await decryptIncomingDM(keysSock, myUserId, msg);
+          if (plaintext === null) return; // own echo — already appended via sendDM
+          cachePlaintext(myUserId, msg.message_id, plaintext);
+          appendMessage({ ...msg, content: encodeText(plaintext) });
+        } catch (e) {
+          console.error(`decrypt incoming ${msg.message_id} failed:`, e);
+          appendMessage({ ...msg, content: encodeText("[decryption failed]") });
+        }
+      } else {
+        appendMessage(msg);
+      }
       if (msg.channel_id !== currentChannelId) {
         markUnread(msg.channel_id);
       }
@@ -500,6 +659,7 @@
     return () => {
       channelSock?.disconnect();
       adminSock?.disconnect();
+      keysSock?.disconnect();
       document.removeEventListener("click", handleClick);
     };
   });
