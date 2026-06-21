@@ -2,7 +2,7 @@
   import '../style.css';
   import { page } from '$app/stores';
 
-  $: isAppPage = $page.url.pathname === '/chat';
+  $: isAppPage = $page.url.pathname === '/chat'||$page.url.pathname === '/profile';;
 
 </script>
 
