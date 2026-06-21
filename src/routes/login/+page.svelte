@@ -45,6 +45,7 @@
   });
 
   function login() {
+    event?.preventDefault();
     if (!username || !password) {
       error = "Username or Password missing!";
       return;
@@ -92,30 +93,28 @@
     isLoggedIn = false;
   }
 
-  function handleKey(e) {
-    if (e.key === "Enter") {
-      login();
-    }
-  }
+
 </script>
 
 <main>
   <div class="card">
-    <h1>Login</h1>
+    <form action="loginForm" novalidate onsubmit={login}>
+      <h1>Login</h1>
 
-    <input type="text" placeholder="Username" bind:value={username} />
+      <input type="text" placeholder="Username" bind:value={username} />
 
-    <input type="password" placeholder="Passwort" bind:value={password} />
+      <input type="password" placeholder="Passwort" bind:value={password} />
 
-    {#if error}
-      <p class="error">{error}</p>
-    {/if}
+      {#if error}
+        <p class="error">{error}</p>
+      {/if}
 
-    <button class="loginButton" on:click={login}> Einloggen </button>
-    <div class="containerLinks">
-      <a href="/register" class="link">Register</a>
-      <a href="/" class="link">Home</a>
-    </div>
+      <button class="loginButton" type="submit"> Einloggen </button>
+      <div class="containerLinks">
+        <a href="/register" class="link">Register</a>
+        <a href="/" class="link">Home</a>
+      </div>
+    </form>
   </div>
 </main>
 
