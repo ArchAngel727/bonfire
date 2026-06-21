@@ -110,11 +110,13 @@
         Continue
       {/if}
     </button>
+    
   </form>
+  <button class="button-return" onclick={() => goto("/")}>Go back</button>
 
   {#if message}
     <h3>{message}</h3>
   {/if}
 
-  <button class="button-return" onclick={() => goto("/")}>Go back</button>
+  
 </main>
