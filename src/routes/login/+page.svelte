@@ -120,10 +120,11 @@
 
 <style>
   main {
-    height: 100vh;
+    height: 100px;
     display: flex;
     justify-content: center;
     align-items: flex-start;
+    margin-top:45px;
     font-family: Arial, sans-serif;
 
   }
