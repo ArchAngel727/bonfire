@@ -100,8 +100,9 @@ button:active {
 /* App layout */
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
+  overflow: hidden;
   flex-direction: column;
 }
 
@@ -619,8 +620,10 @@ button:active {
 .button-return {
   background-color: #b13e3e;
   color: #ffffff;
+  align-self: center;
   display: block;
   width: 120px;
+  margin-top: 20px;
 }
 
 /* Misc */
@@ -638,129 +641,7 @@ button:active {
   width: 100%;
 }
 
-/* Mobile */
 
-@media (max-width: 520px) {
-  .title-group {
-    flex-direction: column;
-    gap: 0.75rem;
-  }
 
-  .row {
-    flex-direction: column;
-    align-items: stretch;
-  }
 
-  .site-main {
-    max-width: 430px;
-  }
 
-  .header-inner {
-    flex-direction: column;
-    gap: 0.5rem;
-    padding: 0;
-  }
-
-  .main-nav {
-    position: static;
-    transform: none;
-    display: flex;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-  }
-
-  .register-form {
-    width: 85%;
-  }
-
-  .screenshot-containers {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .screenshot {
-    width: 300px;
-  }
-
-  a {
-    font-size: 1rem;
-  }
-
-  .brand {
-    font-size: 1.75rem;
-  }
-
-  .popup {
-    width: 70%;
-    height: 30%;
-  }
-
-  .top-left-btn {
-    width: 15%;
-  }
-
-  .chat-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr auto auto;
-    grid-template-areas:
-      "friends"
-      "history"
-      "input"
-      "buttons";
-  }
-
-  .friends,
-  .chat-history,
-  .chat-input {
-    border-right: none;
-  }
-
-  .friends {
-    border-bottom: 3px solid #ffffff;
-  }
-
-  .chat-history {
-    border-bottom: 3px solid #ffffff;
-    min-height: 300px;
-  }
-
-  .chat-input {
-    border-bottom: 3px solid #ffffff;
-  }
-
-  .chat-buttons {
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-
-  button {
-    width: 100%;
-  }
-}
-
-/* Light mode */
-
-@media (prefers-color-scheme: light) {
-  body {
-    color: #000000;
-    background-color: #ffffff;
-  }
-
-  .popup {
-    background: #ffffff;
-    color: #000000;
-  }
-
-  .field input {
-    background-color: #c2c2c2;
-  }
-
-  .chat-input-field {
-    background-color: #c2c2c2;
-  }
-
-  button:active {
-    background-color: #0f0f0f69;
-  }
-}

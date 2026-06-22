@@ -171,7 +171,7 @@
 
 <main class="profile-page">
   <header class="profile-header">
-    <button class="back-btn" on:click={() => goto("/")}>← Back to chat</button>
+    <button class="back-btn" on:click={() => goto("/chat")}>← Back to chat</button>
     <h1>Profile</h1>
   </header>
 

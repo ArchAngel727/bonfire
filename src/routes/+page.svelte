@@ -50,15 +50,5 @@
   </div>
   {/if}
 
-  <p>----------------------------------------------------------------------</p>
-
-  <div class="features">
-  <h1>Features</h1>
-  <div class="screenshot-containers">
-    <img src="src//img/Screenshot1.png" alt="Screenshot 1" class="screenshot" />
-    <img src="src//img/Screenshot1.png" alt="Screenshot 2" class="screenshot" />
-    <img src="src//img/Screenshot1.png" alt="Screenshot 3" class="screenshot" />
-  </div>
-  </div>
 </main>
 
