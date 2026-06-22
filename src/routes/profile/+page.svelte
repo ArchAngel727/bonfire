@@ -13,6 +13,12 @@
   let pwMessage = null; // { kind: "ok" | "error", text: string }
   let pwSubmitting = false;
 
+  // Mod management — only used when profile.is_admin
+  let modUsername = "";
+  let foundUser = null; // { user_id, username, is_admin, is_mod }
+  let modMessage = null;
+  let modSubmitting = false;
+
   let adminSock;
 
   function readCookie() {
@@ -84,6 +90,51 @@
           adminSock?.disconnect();
           goto("/login");
         }, 1500);
+      }
+    );
+  }
+
+  function lookupModUser() {
+    modMessage = null;
+    const name = modUsername.trim();
+    if (!name) {
+      modMessage = { kind: "error", text: "enter a username" };
+      return;
+    }
+    adminSock.emit("find_user", { username: name }, (res) => {
+      if (res.status !== "ok") {
+        foundUser = null;
+        modMessage = { kind: "error", text: res.reason ?? "lookup failed" };
+        return;
+      }
+      foundUser = res;
+    });
+  }
+
+  function toggleMod() {
+    if (!foundUser) return;
+    if (foundUser.is_admin) {
+      modMessage = { kind: "error", text: "cannot change admin's role" };
+      return;
+    }
+    const target = !foundUser.is_mod;
+    modSubmitting = true;
+    adminSock.emit(
+      "set_mod",
+      { user_id: foundUser.user_id, is_mod: target },
+      (res) => {
+        modSubmitting = false;
+        if (res.status !== "ok") {
+          modMessage = { kind: "error", text: res.reason ?? "update failed" };
+          return;
+        }
+        foundUser = { ...foundUser, is_mod: target };
+        modMessage = {
+          kind: "ok",
+          text: target
+            ? `${foundUser.username} is now a moderator`
+            : `${foundUser.username} is now a regular user`,
+        };
       }
     );
   }
@@ -178,6 +229,59 @@
         {/if}
       </div>
     </section>
+
+    {#if profile.is_admin}
+      <section class="card">
+        <h2>Moderator management</h2>
+        <div class="form">
+          <label>
+            Username
+            <input
+              type="text"
+              bind:value={modUsername}
+              placeholder="exact username"
+              on:keydown={(e) => { if (e.key === "Enter") lookupModUser(); }}
+            />
+          </label>
+          <button class="secondary" on:click={lookupModUser}>Look up user</button>
+
+          {#if foundUser}
+            <div class="found-user">
+              <div><strong>{foundUser.username}</strong></div>
+              <div class="found-user-role">
+                Current role:
+                {#if foundUser.is_admin}
+                  Admin
+                {:else if foundUser.is_mod}
+                  Moderator
+                {:else}
+                  User
+                {/if}
+              </div>
+              {#if !foundUser.is_admin}
+                <button
+                  class="primary"
+                  disabled={modSubmitting}
+                  on:click={toggleMod}
+                >
+                  {modSubmitting
+                    ? "Working…"
+                    : foundUser.is_mod
+                    ? "Demote from Mod"
+                    : "Promote to Mod"}
+                </button>
+              {:else}
+                <p class="form-message error">Admin's role can't be changed here.</p>
+              {/if}
+            </div>
+          {/if}
+
+          {#if modMessage}
+            <p class="form-message {modMessage.kind}">{modMessage.text}</p>
+          {/if}
+        </div>
+      </section>
+    {/if}
   {/if}
 </main>
 
@@ -293,6 +397,35 @@
   .primary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .secondary {
+    margin-top: 0.5rem;
+    padding: 0.55rem 1rem;
+    background: transparent;
+    border: 1px solid rgba(255, 140, 50, 0.4);
+    border-radius: 6px;
+    color: #ff8c32;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .secondary:hover {
+    background: rgba(255, 140, 50, 0.1);
+  }
+
+  .found-user {
+    margin-top: 1rem;
+    padding: 0.85rem 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .found-user-role {
+    color: #aaa;
+    font-size: 0.9rem;
   }
 
   .form-message {
